@@ -1,0 +1,45 @@
+[package]
+name = "ssec-core"
+version = "0.1.0"
+edition = "2021"
+description = "streaming implementation of the SSEC file format"
+categories = [ "asynchronous", "encoding", "security" ]
+authors = [ "James Connolly <me@j-conn.com>" ]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/james-conn/ssec-core"
+
+include = [
+	"/Cargo.toml",
+	"/src/*.rs",
+	"LICENSE-MIT",
+	"LICENSE-APACHE"
+]
+
+[dependencies.cbc]
+version = "0.1"
+default-features = false
+
+[dependencies.argon2]
+version = "0.5"
+default-features = false
+features = [ "alloc" ]
+
+[dependencies]
+futures-core = "0.3"
+bytes = "1"
+rand_core = "0.9"
+hmac = "0.12"
+sha3 = "0.10"
+pin-project-lite = "0.2"
+aes = "0.8"
+block-padding = "0.3"
+thiserror = "2"
+zeroize = "1"
+
+[dev-dependencies.tokio]
+version = "1"
+features = [ "rt-multi-thread", "macros" ]
+
+[dev-dependencies]
+futures-util = "0.3"
+rand = "0.9"
