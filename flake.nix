@@ -10,7 +10,7 @@
 				inherit system;
 			}; in {
 				devShell = pkgs.mkShell {
-					buildInputs = with pkgs; [
+					packages = with pkgs; [
 						cargo
 						clippy
 						pandoc
