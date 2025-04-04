@@ -144,7 +144,7 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 					let mut hmac = this.integrity_code.take()
 						.expect("integrity_code only taken here");
 
-					for _ in 0..(remaining_blocks - 1) {
+					for _ in 0..remaining_blocks.saturating_sub(1) {
 						let mut block = this.block_buffer.split_to(16);
 						let block: &mut [u8; 16] = block.as_mut().try_into()
 							.expect("if guard ensures we will always fill blocks");
@@ -153,14 +153,16 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 						output.extend_from_slice(block);
 					}
 
-					let mut final_block = [0; 16];
-					let final_len = this.block_buffer.len();
-					final_block[..final_len].copy_from_slice(this.block_buffer.as_ref());
-					Pkcs7::raw_pad(&mut final_block, final_len);
-					this.aes.encrypt_block_mut(final_block.as_mut().into());
-					output.extend_from_slice(&final_block);
+					if remaining_blocks >= 1 {
+						let mut final_block = [0; 16];
+						let final_len = this.block_buffer.len();
+						final_block[..final_len].copy_from_slice(this.block_buffer.as_ref());
+						Pkcs7::raw_pad(&mut final_block, final_len);
+						this.aes.encrypt_block_mut(final_block.as_mut().into());
+						output.extend_from_slice(&final_block);
 
-					hmac.update(&output);
+						hmac.update(&output);
+					}
 
 					output.extend_from_slice(&hmac.finalize().into_bytes());
 

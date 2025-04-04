@@ -192,7 +192,7 @@ where
 					let mut output = Vec::with_capacity(state.block_count as usize * 16);
 					let mut hmac = state.integrity_code.take().expect("integrity_code only taken here");
 
-					for _ in 0..(state.block_count - 1) {
+					for _ in 0..state.block_count.saturating_sub(1) {
 						let mut block = this.buffer.split_to(16);
 						let block: &mut [u8; 16] = block.as_mut().try_into()
 							.expect("if guard ensures we will always fill blocks");
@@ -203,11 +203,17 @@ where
 					}
 
 					// final (padded) block
-					let mut final_block = this.buffer.split_to(16);
-					let final_block: &mut [u8; 16] = final_block.as_mut().try_into()
-						.expect("if guard ensures we will always fill final block");
+					let final_block = if state.block_count >= 1 {
+						let mut final_block = this.buffer.split_to(16);
+						let final_block_ref: &mut [u8; 16] = final_block.as_mut().try_into()
+							.expect("if guard ensures we will always fill final block");
 
-					hmac.update(final_block);
+						hmac.update(final_block_ref);
+
+						Some(final_block)
+					} else {
+						None
+					};
 
 					let stored_integrity_code = this.buffer.split_to(64);
 					// if we're really paranoid we could use a constant time eq here but
@@ -217,11 +223,16 @@ where
 						return Poll::Ready(Some(Err(DecryptionError::IntegrityFailed)));
 					}
 
-					state.aes.decrypt_block_mut(final_block.into());
-					output.extend_from_slice(match Pkcs7::raw_unpad(final_block) {
-						Ok(unpadded) => unpadded,
-						Err(_) => return Poll::Ready(Some(Err(DecryptionError::Padding)))
-					});
+					if let Some(mut final_block) = final_block {
+						let final_block_ref: &mut [u8; 16] = final_block.as_mut().try_into()
+							.expect("this worked before, so it should work again");
+
+						state.aes.decrypt_block_mut(final_block_ref.into());
+						output.extend_from_slice(match Pkcs7::raw_unpad(final_block_ref) {
+							Ok(unpadded) => unpadded,
+							Err(_) => return Poll::Ready(Some(Err(DecryptionError::Padding)))
+						});
+					}
 
 					*this.state = DecryptState::Done;
 
