@@ -89,6 +89,8 @@ pub enum DecryptionError<E: std::error::Error> {
 	UnsupportedCompression(u8),
 	#[error("wrapped stream does not have the correct length")]
 	IncorrectLength,
+	/// This variant indicates that the file has definitely been tampered with.
+	/// If you receive variant, you **MUST** invalidate any previously decrypted data from this file.
 	#[error("the file has been tampered with, previously decrypted data is inauthentic and should be discarded")]
 	IntegrityFailed,
 	#[error("padding error when decrypting, the SSEC file is authentic but malformed")]
