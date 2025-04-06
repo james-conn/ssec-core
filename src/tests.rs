@@ -2,6 +2,7 @@ use futures_util::StreamExt;
 use bytes::{Bytes, BytesMut};
 use rand_core::SeedableRng;
 use zeroize::Zeroizing;
+use tokio::sync::Semaphore;
 use crate::encrypt::Encrypt;
 use crate::decrypt::{Decrypt, DecryptionError};
 
@@ -13,6 +14,10 @@ const TEST_BUF_LONG: &[u8] = &[42; 12345];
 // it is possible for things to break when working with data that is
 // an exact multiple of 8 AES blocks
 const TEST_BUF_PERFECTLY_ALIGNED: &[u8] = &[42; 8 * 16 * 50];
+
+// KDF uses 512 MB of RAM, running many tests might result in an OOM SIGKILL
+// let's assume we've got 8 GB available at any given time
+static MEM_PERMIT: Semaphore = Semaphore::const_new(16);
 
 macro_rules! test_encrypt {
 	($n:ident, $b:ident) => {
@@ -26,7 +31,9 @@ macro_rules! test_encrypt {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let mut encryptor = tokio::task::spawn_blocking(move || {
+				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -53,7 +60,9 @@ macro_rules! test_end_to_end {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
+				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -64,6 +73,7 @@ macro_rules! test_end_to_end {
 
 			let decryptor = Decrypt::new(s, Zeroizing::new(PASSWORD.to_vec()));
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let decrypted = decryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
 
 			assert_eq!($b, decrypted);
@@ -87,7 +97,9 @@ macro_rules! test_tamper_detection {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
+				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -101,6 +113,7 @@ macro_rules! test_tamper_detection {
 
 			let mut errored = false;
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			while let Some(chunk) = decryptor.next().await {
 				match chunk {
 					Ok(_) => (),
@@ -133,7 +146,9 @@ macro_rules! test_password {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
+				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -146,6 +161,7 @@ macro_rules! test_password {
 
 			let mut errored = false;
 
+			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			while let Some(chunk) = decryptor.next().await {
 				match chunk {
 					Ok(_) => (),

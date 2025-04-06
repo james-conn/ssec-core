@@ -32,8 +32,8 @@ pub(crate) fn kdf(password: &[u8], salt: &[u8]) -> Pin<Zeroizing<[u8; 32]>> {
 		argon2::Algorithm::Argon2d,
 		argon2::Version::V0x13, // version 19
 		argon2::Params::new(
-			50 * 1024, // memory
-			5, // iterations
+			512 * 1024, // memory
+			10, // iterations
 			1, // parallelism
 			Some(32) // KDF output length
 		).unwrap()

@@ -39,8 +39,8 @@ SSEC guarantees confidentiality and integrity against such an adversary.
 The parameters used for Argon2dKDF are as follows:
 
 - version: 19 (`0x13`)
-- memory cost (m cost): 50 * 1024 = 51200 (50 MB)
-- iterations (t cost): 5
+- memory cost (m cost): 512 * 1024 = 524288 (512 MB)
+- iterations (t cost): 10
 - parallelism (p cost): 1
 - output length: 32 bytes
 

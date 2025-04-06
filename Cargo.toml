@@ -38,8 +38,12 @@ zeroize = "1"
 
 [dev-dependencies.tokio]
 version = "1"
-features = [ "rt-multi-thread", "macros" ]
+features = [ "rt", "macros", "sync" ]
 
 [dev-dependencies]
 futures-util = "0.3"
 rand = "0.9"
+
+# turns out running a key derivation function with no optimization is slow, who would have guessed?
+[profile.test]
+opt-level = 1
