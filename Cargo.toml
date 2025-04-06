@@ -1,7 +1,7 @@
 [package]
 name = "ssec-core"
-version = "0.1.1"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 description = "streaming implementation of the SSEC file format"
 categories = [ "asynchronous", "encoding", "security" ]
 authors = [ "James Connolly <me@j-conn.com>" ]
@@ -35,6 +35,7 @@ aes = "0.8"
 block-padding = "0.3"
 thiserror = "2"
 zeroize = "1"
+constant_time_eq = "0.4"
 
 [dev-dependencies.tokio]
 version = "1"

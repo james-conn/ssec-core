@@ -5,6 +5,7 @@ use thiserror::Error;
 use cbc::cipher::{KeyIvInit, BlockDecryptMut};
 use hmac::Mac;
 use block_padding::{Pkcs7, RawPadding};
+use constant_time_eq::constant_time_eq_64;
 use std::thread::{spawn, JoinHandle};
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
@@ -33,8 +34,7 @@ impl KdfState {
 	fn compute(mut self) -> Option<Box<DecryptionState>> {
 		let key = kdf(self.password.as_ref(), &self.salt);
 
-		// TODO: maybe wise to add a constant time eq here
-		let result = if compute_verification_hash(&key).as_ref() == &self.verification_hash {
+		let result = if constant_time_eq_64(compute_verification_hash(&key).as_ref(), &self.verification_hash) {
 			let mut integrity_code = HmacSha3_512::new_from_slice(key.as_ref().get_ref()).unwrap();
 			integrity_code.update(&[self.version_byte, self.compression_algo]);
 
@@ -218,10 +218,8 @@ where
 					};
 
 					let stored_integrity_code = this.buffer.split_to(64);
-					// if we're really paranoid we could use a constant time eq here but
-					// as stated in the spec, side channel attacks are not part of our threat model
-					// so this is acceptable (although not ideal)
-					if stored_integrity_code.as_ref() != hmac.finalize().into_bytes().as_slice() {
+					let stored_integrity_code: &[u8; 64] = stored_integrity_code.as_ref().try_into().unwrap();
+					if !constant_time_eq_64(stored_integrity_code, hmac.finalize().into_bytes().as_ref()) {
 						return Poll::Ready(Some(Err(DecryptionError::IntegrityFailed)));
 					}
 
