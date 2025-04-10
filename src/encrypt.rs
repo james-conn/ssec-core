@@ -120,56 +120,39 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 				}
 			},
 			EncryptState::Finalizing => {
-				if this.block_buffer.len() >= 8 * 16 {
-					let mut output = Vec::with_capacity(8 * 16);
+				debug_assert!(this.block_buffer.len() < 8 * 16);
 
-					for _ in 0..8 {
-						let mut block = this.block_buffer.split_to(16);
-						let block: &mut [u8; 16] = block.as_mut().try_into()
-							.expect("if guard ensures we will always fill blocks");
+				let remaining_blocks = length_to_blocks(this.block_buffer.len() as u64)
+					.expect("if guard prevents overflow") as usize;
 
-						this.aes.encrypt_block_mut(block.into());
-						output.extend_from_slice(block);
-					}
+				let mut output = Vec::with_capacity((remaining_blocks * 16) + 64);
 
-					this.integrity_code.as_mut().unwrap().update(&output);
+				let mut hmac = this.integrity_code.take()
+					.expect("integrity_code only taken here");
 
-					Poll::Ready(Some(Ok(Bytes::from_owner(output))))
-				} else {
-					let remaining_blocks = length_to_blocks(this.block_buffer.len() as u64)
-						.expect("if guard prevents overflow") as usize;
+				for _ in 0..remaining_blocks.saturating_sub(1) {
+					let mut block = this.block_buffer.split_to(16);
+					let block: &mut [u8; 16] = block.as_mut().try_into()
+						.expect("if guard ensures we will always fill blocks");
 
-					let mut output = Vec::with_capacity((remaining_blocks * 16) + 64);
-
-					let mut hmac = this.integrity_code.take()
-						.expect("integrity_code only taken here");
-
-					for _ in 0..remaining_blocks.saturating_sub(1) {
-						let mut block = this.block_buffer.split_to(16);
-						let block: &mut [u8; 16] = block.as_mut().try_into()
-							.expect("if guard ensures we will always fill blocks");
-
-						this.aes.encrypt_block_mut(block.into());
-						output.extend_from_slice(block);
-					}
-
-					if remaining_blocks >= 1 {
-						let mut final_block = [0; 16];
-						let final_len = this.block_buffer.len();
-						final_block[..final_len].copy_from_slice(this.block_buffer.as_ref());
-						Pkcs7::raw_pad(&mut final_block, final_len);
-						this.aes.encrypt_block_mut(final_block.as_mut().into());
-						output.extend_from_slice(&final_block);
-
-						hmac.update(&output);
-					}
-
-					output.extend_from_slice(&hmac.finalize().into_bytes());
-
-					*this.state = EncryptState::Finished;
-
-					Poll::Ready(Some(Ok(Bytes::from_owner(output))))
+					this.aes.encrypt_block_mut(block.into());
+					output.extend_from_slice(block);
 				}
+
+				let mut final_block = [0; 16];
+				let final_len = this.block_buffer.len();
+				final_block[..final_len].copy_from_slice(this.block_buffer.as_ref());
+				Pkcs7::raw_pad(&mut final_block, final_len);
+				this.aes.encrypt_block_mut(final_block.as_mut().into());
+				output.extend_from_slice(&final_block);
+
+				hmac.update(&output);
+
+				output.extend_from_slice(&hmac.finalize().into_bytes());
+
+				*this.state = EncryptState::Finished;
+
+				Poll::Ready(Some(Ok(Bytes::from_owner(output))))
 			},
 			EncryptState::PreHeader => {
 				match this.read.poll_next(cx) {

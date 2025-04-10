@@ -16,11 +16,7 @@ pub(crate) fn new_arr<const N: usize>() -> Box<[u8; N]> {
 
 #[inline]
 pub(crate) fn length_to_blocks(length: u64) -> Result<u32, std::num::TryFromIntError> {
-	let blocks = (length / 16) + match length % 16 {
-		0 => 0,
-		_ => 1
-	};
-
+	let blocks = (length / 16) + 1;
 	u32::try_from(blocks)
 }
 
