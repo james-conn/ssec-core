@@ -14,6 +14,8 @@ const TEST_BUF_LONG: &[u8] = &[42; 12345];
 // it is possible for things to break when working with data that is
 // an exact multiple of 8 AES blocks
 const TEST_BUF_PERFECTLY_ALIGNED: &[u8] = &[42; 8 * 16 * 50];
+// what if we have a multiple of the block size that's *not* divisible by 8?
+const TEST_BUF_IMPERFECTLY_ALIGNED: &[u8] = &[42; 9 * 16];
 
 // KDF uses 512 MB of RAM, running many tests might result in an OOM SIGKILL
 // let's assume we've got 8 GB available at any given time
@@ -47,6 +49,7 @@ macro_rules! test_encrypt {
 test_encrypt!(encrypt_buf_short, TEST_BUF_SHORT);
 test_encrypt!(encrypt_buf_long, TEST_BUF_LONG);
 test_encrypt!(encrypt_buf_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
+test_encrypt!(encrypt_buf_imperfectly_aligned, TEST_BUF_IMPERFECTLY_ALIGNED);
 
 macro_rules! test_end_to_end {
 	($n:ident, $b:ident) => {
@@ -84,6 +87,7 @@ macro_rules! test_end_to_end {
 test_end_to_end!(end_to_end_short, TEST_BUF_SHORT);
 test_end_to_end!(end_to_end_long, TEST_BUF_LONG);
 test_end_to_end!(end_to_end_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
+test_end_to_end!(end_to_end_imperfectly_aligned, TEST_BUF_IMPERFECTLY_ALIGNED);
 
 macro_rules! test_tamper_detection {
 	($n:ident, $b:ident, $n_bit:literal, $v:literal, $e:ident) => {
@@ -133,6 +137,7 @@ macro_rules! test_tamper_detection {
 test_tamper_detection!(tamper_short, TEST_BUF_SHORT, 150, 0x42, IntegrityFailed);
 test_tamper_detection!(tamper_long, TEST_BUF_LONG, 1234, 0x42, IntegrityFailed);
 test_tamper_detection!(tamper_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED, 1234, 0x42, IntegrityFailed);
+test_tamper_detection!(tamper_imperfectly_aligned, TEST_BUF_IMPERFECTLY_ALIGNED, 150, 0x42, IntegrityFailed);
 
 macro_rules! test_password {
 	($n:ident, $b:ident) => {
@@ -181,3 +186,4 @@ macro_rules! test_password {
 test_password!(wrong_password_short, TEST_BUF_SHORT);
 test_password!(wrong_password_long, TEST_BUF_LONG);
 test_password!(wrong_password_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
+test_password!(wrong_password_imperfectly_aligned, TEST_BUF_IMPERFECTLY_ALIGNED);
