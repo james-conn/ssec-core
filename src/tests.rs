@@ -39,9 +39,13 @@ macro_rules! test_encrypt {
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
+			let mut total_encrypted_len = 0;
+
 			while let Some(chunk) = encryptor.next().await {
-				std::hint::black_box(chunk.unwrap());
+				total_encrypted_len += chunk.unwrap().len();
 			}
+
+			assert_eq!(encryptor.total_output_len(), total_encrypted_len as u64);
 		}
 	}
 }

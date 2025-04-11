@@ -77,6 +77,22 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Decrypt<R> {
 			buffer: BytesMut::new()
 		}
 	}
+
+	/// Returns the number of bytes that will be read from the wrapped stream.
+	/// If this information is not available yet, `None` will be returned.
+	pub fn remaining_read_len(&self) -> Option<u64> {
+		match &self.state {
+			DecryptState::PreHeader(_) | DecryptState::Kdf(_) => None,
+			DecryptState::PostHeader(state) => {
+				Some(
+					(state.block_count as u64 * 16) // remaining blocks to be read
+					+ 64 // add an extra 64 for the integrity code at the end
+					- self.buffer.len() as u64 // subtract what we already have
+				)
+			},
+			DecryptState::Done => Some(0)
+		}
+	}
 }
 
 #[derive(Error, Debug)]

@@ -75,6 +75,11 @@ impl<R> Encrypt<R> {
 			iv
 		})
 	}
+
+	/// returns the total length this stream will output in bytes
+	pub fn total_output_len(&self) -> u64 {
+		(self.block_count as u64 * 16) + 186
+	}
 }
 
 impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
