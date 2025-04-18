@@ -10,6 +10,7 @@ use std::thread::{spawn, JoinHandle};
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
 use crate::util::{HmacSha3_512, kdf, compute_verification_hash};
+use crate::AES_BLOCKS_PER_POLL;
 
 type Aes256Cbc = cbc::Decryptor<aes::Aes256>;
 
@@ -206,7 +207,7 @@ where
 				}
 			},
 			DecryptState::PostHeader(state) => {
-				if state.block_count < 8 && this.buffer.len() == (state.block_count as usize * 16) + 64 {
+				if state.block_count < AES_BLOCKS_PER_POLL as u32 && this.buffer.len() == (state.block_count as usize * 16) + 64 {
 					let mut output = Vec::with_capacity(state.block_count as usize * 16);
 					let mut hmac = state.integrity_code.take().expect("integrity_code only taken here");
 
@@ -253,10 +254,10 @@ where
 					*this.state = DecryptState::Done;
 
 					Poll::Ready(Some(Ok(Bytes::from_owner(output))))
-				} else if state.block_count >= 8 && this.buffer.len() >= 16 * 8 {
-					let mut output = Vec::with_capacity(16 * 8);
+				} else if state.block_count >= AES_BLOCKS_PER_POLL as u32 && this.buffer.len() >= 16 * AES_BLOCKS_PER_POLL {
+					let mut output = Vec::with_capacity(16 * AES_BLOCKS_PER_POLL);
 
-					for _ in 0..8 {
+					for _ in 0..AES_BLOCKS_PER_POLL {
 						let mut block = this.buffer.split_to(16);
 						let block: &mut [u8; 16] = block.as_mut().try_into()
 							.expect("if guard ensures we will always fill blocks");
@@ -266,7 +267,7 @@ where
 						output.extend_from_slice(block);
 					}
 
-					state.block_count -= 8;
+					state.block_count -= AES_BLOCKS_PER_POLL as u32;
 
 					Poll::Ready(Some(Ok(Bytes::from_owner(output))))
 				} else {

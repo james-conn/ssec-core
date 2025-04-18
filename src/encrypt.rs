@@ -9,6 +9,7 @@ use thiserror::Error;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use crate::util::{HmacSha3_512, new_arr, length_to_blocks, kdf, compute_verification_hash};
+use crate::AES_BLOCKS_PER_POLL;
 
 type Aes256Cbc = cbc::Encryptor<aes::Aes256>;
 
@@ -93,10 +94,10 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 
 		match this.state {
 			EncryptState::PostHeader => {
-				if this.block_buffer.len() >= 8 * 16 {
-					let mut output = Vec::with_capacity(8 * 16);
+				if this.block_buffer.len() >= AES_BLOCKS_PER_POLL * 16 {
+					let mut output = Vec::with_capacity(AES_BLOCKS_PER_POLL * 16);
 
-					for _ in 0..8 {
+					for _ in 0..AES_BLOCKS_PER_POLL {
 						let mut block = this.block_buffer.split_to(16);
 						let block: &mut [u8; 16] = block.as_mut().try_into()
 							.expect("if guard ensures we will always fill blocks");
@@ -125,7 +126,7 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 				}
 			},
 			EncryptState::Finalizing => {
-				debug_assert!(this.block_buffer.len() < 8 * 16);
+				debug_assert!(this.block_buffer.len() < AES_BLOCKS_PER_POLL * 16);
 
 				let remaining_blocks = length_to_blocks(this.block_buffer.len() as u64)
 					.expect("if guard prevents overflow") as usize;
