@@ -41,9 +41,13 @@ constant_time_eq = "0.4"
 version = "1"
 features = [ "rt", "macros", "sync" ]
 
+[dev-dependencies.rand]
+version = "0.9"
+default-features = false
+features = [ "std_rng" ]
+
 [dev-dependencies]
 futures-util = "0.3"
-rand = "0.9"
 
 # turns out running a key derivation function with no optimization is slow, who would have guessed?
 [profile.test]
