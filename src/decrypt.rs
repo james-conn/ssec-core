@@ -207,7 +207,7 @@ where
 				}
 			},
 			DecryptState::PostHeader(state) => {
-				if state.block_count < AES_BLOCKS_PER_POLL as u32 && this.buffer.len() == (state.block_count as usize * 16) + 64 {
+				if state.block_count <= AES_BLOCKS_PER_POLL as u32 && this.buffer.len() == (state.block_count as usize * 16) + 64 {
 					let mut output = Vec::with_capacity(state.block_count as usize * 16);
 					let mut hmac = state.integrity_code.take().expect("integrity_code only taken here");
 
@@ -221,18 +221,12 @@ where
 						output.extend_from_slice(block);
 					}
 
-					// final (padded) block
-					let final_block = if state.block_count >= 1 {
-						let mut final_block = this.buffer.split_to(16);
-						let final_block_ref: &mut [u8; 16] = final_block.as_mut().try_into()
-							.expect("if guard ensures we will always fill final block");
+					debug_assert!(state.block_count >= 1);
+					let mut final_block = this.buffer.split_to(16);
+					let final_block: &mut [u8; 16] = final_block.as_mut().try_into()
+						.expect("should be at least one block left");
 
-						hmac.update(final_block_ref);
-
-						Some(final_block)
-					} else {
-						None
-					};
+					hmac.update(final_block);
 
 					let stored_integrity_code = this.buffer.split_to(64);
 					let stored_integrity_code: &[u8; 64] = stored_integrity_code.as_ref().try_into().unwrap();
@@ -240,21 +234,16 @@ where
 						return Poll::Ready(Some(Err(DecryptionError::IntegrityFailed)));
 					}
 
-					if let Some(mut final_block) = final_block {
-						let final_block_ref: &mut [u8; 16] = final_block.as_mut().try_into()
-							.expect("this worked before, so it should work again");
-
-						state.aes.decrypt_block_mut(final_block_ref.into());
-						output.extend_from_slice(match Pkcs7::raw_unpad(final_block_ref) {
-							Ok(unpadded) => unpadded,
-							Err(_) => return Poll::Ready(Some(Err(DecryptionError::Padding)))
-						});
-					}
+					state.aes.decrypt_block_mut(final_block.into());
+					output.extend_from_slice(match Pkcs7::raw_unpad(final_block) {
+						Ok(unpadded) => unpadded,
+						Err(_) => return Poll::Ready(Some(Err(DecryptionError::Padding)))
+					});
 
 					*this.state = DecryptState::Done;
 
 					Poll::Ready(Some(Ok(Bytes::from_owner(output))))
-				} else if state.block_count >= AES_BLOCKS_PER_POLL as u32 && this.buffer.len() >= 16 * AES_BLOCKS_PER_POLL {
+				} else if state.block_count > AES_BLOCKS_PER_POLL as u32 && this.buffer.len() >= 16 * AES_BLOCKS_PER_POLL {
 					let mut output = Vec::with_capacity(16 * AES_BLOCKS_PER_POLL);
 
 					for _ in 0..AES_BLOCKS_PER_POLL {
