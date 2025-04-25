@@ -1,13 +1,14 @@
 use futures_util::StreamExt;
 use bytes::{Bytes, BytesMut};
 use rand_core::SeedableRng;
-use zeroize::Zeroizing;
-use tokio::sync::Semaphore;
 use crate::encrypt::Encrypt;
-use crate::decrypt::{Decrypt, DecryptionError};
+use crate::decrypt::{Decrypt, DecryptStreamError};
 
 const RNG_SEED: u64 = 12345678;
+
 const PASSWORD: &[u8] = b"hunter2";
+const WRONG_PASSWORD: &[u8] = b"not_hunter2";
+
 const TEST_BUF_EMPTY: &[u8] = &[];
 const TEST_BUF_SHORT: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8];
 const TEST_BUF_LONG: &[u8] = &[42; 12345];
@@ -21,10 +22,6 @@ const TEST_BUF_IMPERFECTLY_ALIGNED: &[u8] = &[42; 9 * 16];
 // extra block which makes it a perfect multiple of 8 again
 const TEST_BUF_PERFECT_PAD: &[u8] = &[42; 7 * 16];
 
-// KDF uses 512 MB of RAM, running many tests might result in an OOM SIGKILL
-// let's assume we've got 8 GB available at any given time
-static MEM_PERMIT: Semaphore = Semaphore::const_new(16);
-
 macro_rules! test_encrypt {
 	($n:ident, $b:ident) => {
 		#[tokio::test]
@@ -37,9 +34,7 @@ macro_rules! test_encrypt {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let mut encryptor = tokio::task::spawn_blocking(move || {
-				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -73,9 +68,7 @@ macro_rules! test_end_to_end {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
-				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -84,9 +77,12 @@ macro_rules! test_end_to_end {
 				std::future::ready(Result::<Bytes, std::io::Error>::Ok(encrypted))
 			);
 
-			let decryptor = Decrypt::new(s, Zeroizing::new(PASSWORD.to_vec()));
+			let decryptor = Decrypt::new(s).await.unwrap();
+			let decryptor = tokio::task::spawn_blocking(move || {
+				let Ok(stream) = decryptor.try_password(PASSWORD) else { panic!("password should be correct") };
+				stream
+			}).await.unwrap();
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let decrypted = decryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
 
 			assert_eq!($b, decrypted);
@@ -113,9 +109,7 @@ macro_rules! test_tamper_detection {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
-				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -125,15 +119,18 @@ macro_rules! test_tamper_detection {
 				std::future::ready(Result::<Bytes, std::io::Error>::Ok(encrypted.freeze()))
 			);
 
-			let mut decryptor = Decrypt::new(s, Zeroizing::new(PASSWORD.to_vec()));
+			let decryptor = Decrypt::new(s).await.unwrap();
+			let mut decryptor = tokio::task::spawn_blocking(move || {
+				let Ok(stream) = decryptor.try_password(PASSWORD) else { panic!("password should be correct") };
+				stream
+			}).await.unwrap();
 
 			let mut errored = false;
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			while let Some(chunk) = decryptor.next().await {
 				match chunk {
 					Ok(_) => (),
-					Err(DecryptionError::$e) => {
+					Err(DecryptStreamError::$e) => {
 						errored = true;
 						break;
 					},
@@ -164,9 +161,7 @@ macro_rules! test_password {
 				std::future::ready(Result::<Bytes, ()>::Ok(buf))
 			);
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
 			let encryptor = tokio::task::spawn_blocking(move || {
-				let _permit = _permit;
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
 			}).await.unwrap();
 
@@ -175,23 +170,24 @@ macro_rules! test_password {
 				std::future::ready(Result::<Bytes, std::io::Error>::Ok(encrypted))
 			);
 
-			let mut decryptor = Decrypt::new(s, Zeroizing::new(b"not_hunter2".to_vec()));
+			let decryptor = Decrypt::new(s).await.unwrap();
+			let decryptor = tokio::task::spawn_blocking(move || {
+				decryptor.try_password(WRONG_PASSWORD)
+			}).await.unwrap();
 
-			let mut errored = false;
+			let decryptor = match decryptor {
+				Ok(_) => panic!("password should be incorrect"),
+				Err(d) => d
+			};
 
-			let _permit = MEM_PERMIT.acquire().await.unwrap();
-			while let Some(chunk) = decryptor.next().await {
-				match chunk {
-					Ok(_) => (),
-					Err(DecryptionError::PasswordIncorrect) => {
-						errored = true;
-						break;
-					},
-					Err(e) => panic!("incorrect error raised {e:?}")
-				}
-			}
+			let decryptor = tokio::task::spawn_blocking(move || {
+				let Ok(stream) = decryptor.try_password(PASSWORD) else { panic!("password should be correct") };
+				stream
+			}).await.unwrap();
 
-			assert!(errored);
+			let decrypted = decryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
+
+			assert_eq!($b, decrypted);
 		}
 	}
 }

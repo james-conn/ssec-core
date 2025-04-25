@@ -39,7 +39,7 @@ constant_time_eq = "0.4"
 
 [dev-dependencies.tokio]
 version = "1"
-features = [ "rt", "macros", "sync" ]
+features = [ "rt", "macros" ]
 
 [dev-dependencies.rand]
 version = "0.9"
