@@ -181,7 +181,7 @@ impl<R> DecryptStream<R> {
 }
 
 #[derive(Error, Debug)]
-pub enum DecryptStreamError<E: std::error::Error> {
+pub enum DecryptStreamError<E> {
 	#[error("wrapped stream does not have the correct length")]
 	IncorrectLength,
 	/// This variant indicates that the file is inauthentic.
@@ -196,7 +196,6 @@ pub enum DecryptStreamError<E: std::error::Error> {
 
 impl<E, R> Stream for DecryptStream<R>
 where
-	E: std::error::Error,
 	R: Stream<Item = Result<Bytes, E>>
 {
 	type Item = Result<Bytes, DecryptStreamError<E>>;
