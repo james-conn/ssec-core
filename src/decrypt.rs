@@ -120,6 +120,8 @@ impl<R> DecryptAwaitingPassword<R> {
 	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
 	///
 	/// If a `Result::Err` is returned it indicates the password was incorrect.
+	///
+	/// SECURITY: It is advisable to zero out the memory containing the password after this method returns.
 	pub fn try_password(self: Box<Self>, password: &[u8]) -> Result<DecryptStream<R>, Box<Self>> {
 		let key = kdf(password, &self.salt);
 
@@ -182,7 +184,7 @@ impl<R> DecryptStream<R> {
 pub enum DecryptStreamError<E: std::error::Error> {
 	#[error("wrapped stream does not have the correct length")]
 	IncorrectLength,
-	/// This variant indicates that the file has definitely been tampered with.
+	/// This variant indicates that the file is inauthentic.
 	/// If you receive variant, you **MUST** invalidate any previously decrypted data from this file.
 	#[error("the file has been tampered with, previously decrypted data is inauthentic and should be discarded")]
 	IntegrityFailed,
