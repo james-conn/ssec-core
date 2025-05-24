@@ -1,6 +1,8 @@
 mod util;
 
-const AES_BLOCKS_PER_POLL: usize = 8;
+const BYTES_PER_POLL: usize = 128;
+
+type Aes256Ctr = ctr::Ctr64LE<aes::Aes256>;
 
 pub mod encrypt;
 pub use encrypt::Encrypt;
