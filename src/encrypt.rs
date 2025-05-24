@@ -67,94 +67,94 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 		self: Pin<&mut Self>,
 		cx: &mut Context<'_>
 	) -> Poll<Option<Self::Item>> {
-		let this = self.project();
+		let mut this = self.project();
 
-		match this.state {
-			EncryptState::PreHeader => {
-				match this.read.poll_next(cx) {
-					Poll::Pending => (),
-					Poll::Ready(None) => {
-						*this.state = EncryptState::Finished;
-						return Poll::Ready(None);
-					},
-					Poll::Ready(Some(Err(e))) => {
-						*this.state = EncryptState::Finished;
-						return Poll::Ready(Some(Err(e)));
-					},
-					Poll::Ready(Some(Ok(bytes))) => {
-						this.block_buffer.put(bytes);
-					}
-				}
-
-				let mut buf = Vec::with_capacity(
-					4 + // magic
-					1 + // version number
-					1 + // compression algo
-					32 + // password salt
-					64 + // password verification hash
-					16 // IV
-				);
-
-				buf.extend_from_slice(b"SSEC");
-				buf.push(0x01);
-				buf.push(0x6e);
-				buf.extend_from_slice(this.password_salt.as_ref());
-				buf.extend_from_slice(this.password_verification_hash.as_ref());
-				buf.extend_from_slice(this.iv.as_ref());
-
-				// as per spec: first we add the version byte and compression algo before the data
-				let integrity_code = this.integrity_code.as_mut().unwrap();
-				integrity_code.update(&[0x01, 0x6e]);
-				integrity_code.update(this.iv.as_ref());
-
-				*this.state = EncryptState::PostHeader;
-
-				Poll::Ready(Some(Ok(Bytes::from_owner(buf))))
-			},
-			EncryptState::PostHeader => {
-				if this.block_buffer.len() >= BYTES_PER_POLL {
-					let mut data = this.block_buffer.split_to(BYTES_PER_POLL);
-					this.aes.apply_keystream(&mut data);
-					this.integrity_code.as_mut().unwrap().update(&data);
-
-					Poll::Ready(Some(Ok(data.freeze())))
-				} else {
-					match ready!(this.read.poll_next(cx)) {
-						Some(Ok(bytes)) => {
-							this.block_buffer.put(bytes);
-							cx.waker().wake_by_ref();
-							Poll::Pending
-						},
-						Some(Err(e)) => {
+		loop {
+			match this.state {
+				EncryptState::PreHeader => {
+					match this.read.poll_next(cx) {
+						Poll::Pending => (),
+						Poll::Ready(None) => {
 							*this.state = EncryptState::Finished;
-							Poll::Ready(Some(Err(e)))
+							return Poll::Ready(None);
 						},
-						None => {
-							*this.state = EncryptState::Finalizing;
-							cx.waker().wake_by_ref();
-							Poll::Pending
+						Poll::Ready(Some(Err(e))) => {
+							*this.state = EncryptState::Finished;
+							return Poll::Ready(Some(Err(e)));
+						},
+						Poll::Ready(Some(Ok(bytes))) => {
+							this.block_buffer.put(bytes);
 						}
 					}
-				}
-			},
-			EncryptState::Finalizing => {
-				debug_assert!(this.block_buffer.len() < BYTES_PER_POLL);
 
-				let mut final_data = this.block_buffer.split();
+					let mut buf = Vec::with_capacity(
+						4 + // magic
+						1 + // version number
+						1 + // compression algo
+						32 + // password salt
+						64 + // password verification hash
+						16 // IV
+					);
 
-				let mut hmac = this.integrity_code.take()
-					.expect("integrity_code only taken here");
+					buf.extend_from_slice(b"SSEC");
+					buf.push(0x01);
+					buf.push(0x6e);
+					buf.extend_from_slice(this.password_salt.as_ref());
+					buf.extend_from_slice(this.password_verification_hash.as_ref());
+					buf.extend_from_slice(this.iv.as_ref());
 
-				this.aes.apply_keystream(&mut final_data);
+					// as per spec: first we add the version byte, compression algo, then iv before the data
+					let integrity_code = this.integrity_code.as_mut().unwrap();
+					integrity_code.update(&[0x01, 0x6e]);
+					integrity_code.update(this.iv.as_ref());
 
-				hmac.update(&final_data);
-				final_data.put(Bytes::from_owner(hmac.finalize().into_bytes()));
+					*this.state = EncryptState::PostHeader;
 
-				*this.state = EncryptState::Finished;
+					return Poll::Ready(Some(Ok(Bytes::from_owner(buf))));
+				},
+				EncryptState::PostHeader => {
+					if this.block_buffer.len() >= BYTES_PER_POLL {
+						let mut data = this.block_buffer.split_to(BYTES_PER_POLL);
+						this.aes.apply_keystream(&mut data);
+						this.integrity_code.as_mut().unwrap().update(&data);
 
-				Poll::Ready(Some(Ok(final_data.freeze())))
-			},
-			EncryptState::Finished => Poll::Ready(None)
+						return Poll::Ready(Some(Ok(data.freeze())));
+					} else {
+						match ready!(this.read.as_mut().poll_next(cx)) {
+							Some(Ok(bytes)) => {
+								this.block_buffer.put(bytes);
+								continue;
+							},
+							Some(Err(e)) => {
+								*this.state = EncryptState::Finished;
+								return Poll::Ready(Some(Err(e)));
+							},
+							None => {
+								*this.state = EncryptState::Finalizing;
+								continue;
+							}
+						}
+					}
+				},
+				EncryptState::Finalizing => {
+					debug_assert!(this.block_buffer.len() < BYTES_PER_POLL);
+
+					let mut final_data = this.block_buffer.split();
+
+					let mut hmac = this.integrity_code.take()
+						.expect("integrity_code only taken here");
+
+					this.aes.apply_keystream(&mut final_data);
+
+					hmac.update(&final_data);
+					final_data.put(Bytes::from_owner(hmac.finalize().into_bytes()));
+
+					*this.state = EncryptState::Finished;
+
+					return Poll::Ready(Some(Ok(final_data.freeze())));
+				},
+				EncryptState::Finished => return Poll::Ready(None)
+			}
 		}
 	}
 }
