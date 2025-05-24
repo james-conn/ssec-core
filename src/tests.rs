@@ -9,7 +9,6 @@ const RNG_SEED: u64 = 12345678;
 const PASSWORD: &[u8] = b"hunter2";
 const WRONG_PASSWORD: &[u8] = b"not_hunter2";
 
-const TEST_BUF_EMPTY: &[u8] = &[];
 const TEST_BUF_SHORT: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8];
 const TEST_BUF_LONG: &[u8] = &[42; 12345];
 // `Encrypt` and `Decrypt` both work on 8 AES blocks at a time so
@@ -35,21 +34,16 @@ macro_rules! test_encrypt {
 			);
 
 			let mut encryptor = tokio::task::spawn_blocking(move || {
-				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
+				Encrypt::new_uncompressed(s, PASSWORD, &mut rng).unwrap()
 			}).await.unwrap();
 
-			let mut total_encrypted_len = 0;
-
 			while let Some(chunk) = encryptor.next().await {
-				total_encrypted_len += chunk.unwrap().len();
+				let _ = chunk.unwrap();
 			}
-
-			assert_eq!(encryptor.total_output_len(), total_encrypted_len as u64);
 		}
 	}
 }
 
-test_encrypt!(encrypt_buf_empty, TEST_BUF_EMPTY);
 test_encrypt!(encrypt_buf_short, TEST_BUF_SHORT);
 test_encrypt!(encrypt_buf_long, TEST_BUF_LONG);
 test_encrypt!(encrypt_buf_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
@@ -69,7 +63,7 @@ macro_rules! test_end_to_end {
 			);
 
 			let encryptor = tokio::task::spawn_blocking(move || {
-				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
+				Encrypt::new_uncompressed(s, PASSWORD, &mut rng).unwrap()
 			}).await.unwrap();
 
 			let encrypted = encryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
@@ -90,7 +84,6 @@ macro_rules! test_end_to_end {
 	}
 }
 
-test_end_to_end!(end_to_end_empty, TEST_BUF_EMPTY);
 test_end_to_end!(end_to_end_short, TEST_BUF_SHORT);
 test_end_to_end!(end_to_end_long, TEST_BUF_LONG);
 test_end_to_end!(end_to_end_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
@@ -110,7 +103,7 @@ macro_rules! test_tamper_detection {
 			);
 
 			let encryptor = tokio::task::spawn_blocking(move || {
-				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
+				Encrypt::new_uncompressed(s, PASSWORD, &mut rng).unwrap()
 			}).await.unwrap();
 
 			let mut encrypted: BytesMut = encryptor.map(|c| c.unwrap()).collect().await;
@@ -162,7 +155,7 @@ macro_rules! test_password {
 			);
 
 			let encryptor = tokio::task::spawn_blocking(move || {
-				Encrypt::new_uncompressed(s, PASSWORD, &mut rng, $b.len() as u64).unwrap()
+				Encrypt::new_uncompressed(s, PASSWORD, &mut rng).unwrap()
 			}).await.unwrap();
 
 			let encrypted = encryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
@@ -192,7 +185,6 @@ macro_rules! test_password {
 	}
 }
 
-test_password!(wrong_password_empty, TEST_BUF_EMPTY);
 test_password!(wrong_password_short, TEST_BUF_SHORT);
 test_password!(wrong_password_long, TEST_BUF_LONG);
 test_password!(wrong_password_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);

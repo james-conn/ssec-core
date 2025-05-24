@@ -72,7 +72,7 @@ In the `ssec` command line tool, retroactive invalidation is implemented by decr
 
 # Encrypted File
 To encrypt, the input file is passed through the function specified by the compression algorithm (byte 5).
-The output of the compression is then encrypted using AES-256-CTR, with the key being the output of `Argon2dKDF(password, salt)`.
+The output of the compression is then encrypted using AES-256-CTR as a stream cipher with a 64-bit little endian counter, with the key being the output of `Argon2dKDF(password, salt)`.
 The decryption process is the inverse of the encryption process.
 
 # Security Checklist

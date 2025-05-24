@@ -14,11 +14,11 @@ pub(crate) fn new_arr<const N: usize>() -> Box<[u8; N]> {
 	unsafe { arr.assume_init() }
 }
 
-#[inline]
-pub(crate) fn length_to_blocks(length: u64) -> Result<u32, std::num::TryFromIntError> {
-	let blocks = (length / 16) + 1;
-	u32::try_from(blocks)
-}
+#[cfg(not(test))]
+const KDF_MEM: u32 = 512 * 1024;
+
+#[cfg(test)]
+const KDF_MEM: u32 = 64;
 
 // returns a pin to absolutely ensure the compiler won't troll our memory erasure
 pub(crate) fn kdf(password: &[u8], salt: &[u8]) -> Pin<Zeroizing<[u8; 32]>> {
@@ -28,7 +28,7 @@ pub(crate) fn kdf(password: &[u8], salt: &[u8]) -> Pin<Zeroizing<[u8; 32]>> {
 		argon2::Algorithm::Argon2d,
 		argon2::Version::V0x13, // version 19
 		argon2::Params::new(
-			512 * 1024, // memory
+			KDF_MEM,
 			10, // iterations
 			1, // parallelism
 			Some(32) // KDF output length
