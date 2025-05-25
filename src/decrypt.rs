@@ -195,7 +195,7 @@ where
 
 		match this.state {
 			DecryptState::PostHeader(state) => {
-				if state.eof {
+				if state.eof && this.buffer.len() <= BYTES_PER_POLL {
 					if state.eof_buf.len() < 64 {
 						*this.state = DecryptState::Done;
 						return Poll::Ready(Some(Err(DecryptStreamError::TooShort)));
