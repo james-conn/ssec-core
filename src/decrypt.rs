@@ -230,7 +230,7 @@ where
 							state.eof_buf.put(bytes);
 							let eof_len = state.eof_buf.len();
 							if eof_len > 64 {
-								this.buffer.put(state.eof_buf.split_off(eof_len - 64));
+								this.buffer.put(state.eof_buf.split_to(eof_len - 64));
 								debug_assert_eq!(state.eof_buf.len(), 64);
 							}
 							cx.waker().wake_by_ref();

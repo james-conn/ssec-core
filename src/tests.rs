@@ -58,20 +58,21 @@ macro_rules! test_end_to_end {
 		async fn $n() {
 			let mut rng = rand::rngs::StdRng::seed_from_u64(RNG_SEED);
 
-			let buf = Bytes::from_owner($b);
-
-			let s = futures_util::stream::once(
-				std::future::ready(Result::<Bytes, ()>::Ok(buf))
-			);
+			let s = futures_util::stream::iter($b.chunks(1024))
+				.map(Bytes::copy_from_slice)
+				.map(Result::<Bytes, std::io::Error>::Ok);
 
 			let encryptor = tokio::task::spawn_blocking(move || {
 				Encrypt::new_uncompressed(s, PASSWORD, &mut rng).unwrap()
 			}).await.unwrap();
 
-			let encrypted = encryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
-			let s = futures_util::stream::once(
-				std::future::ready(Result::<Bytes, std::io::Error>::Ok(encrypted))
-			);
+			let encrypted: Bytes = encryptor.map(|c| c.unwrap())
+				.collect::<BytesMut>().await.freeze();
+
+			let enc_chunks = encrypted.chunks(1024)
+				.map(Bytes::copy_from_slice).collect::<Vec<Bytes>>();
+			let s = futures_util::stream::iter(enc_chunks)
+				.map(Result::<Bytes, std::io::Error>::Ok);
 
 			let decryptor = Decrypt::new(s).await.unwrap();
 			let decryptor = tokio::task::spawn_blocking(move || {

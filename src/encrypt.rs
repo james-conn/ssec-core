@@ -72,21 +72,6 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 		loop {
 			match this.state {
 				EncryptState::PreHeader => {
-					match this.read.poll_next(cx) {
-						Poll::Pending => (),
-						Poll::Ready(None) => {
-							*this.state = EncryptState::Finished;
-							return Poll::Ready(None);
-						},
-						Poll::Ready(Some(Err(e))) => {
-							*this.state = EncryptState::Finished;
-							return Poll::Ready(Some(Err(e)));
-						},
-						Poll::Ready(Some(Ok(bytes))) => {
-							this.block_buffer.put(bytes);
-						}
-					}
-
 					let mut buf = Vec::with_capacity(
 						4 + // magic
 						1 + // version number
@@ -108,7 +93,18 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 					integrity_code.update(&[0x01, 0x6e]);
 					integrity_code.update(this.iv.as_ref());
 
-					*this.state = EncryptState::PostHeader;
+					match this.read.poll_next(cx) {
+						Poll::Pending => *this.state = EncryptState::PostHeader,
+						Poll::Ready(None) => *this.state = EncryptState::Finalizing,
+						Poll::Ready(Some(Err(e))) => {
+							*this.state = EncryptState::Finished;
+							return Poll::Ready(Some(Err(e)));
+						},
+						Poll::Ready(Some(Ok(bytes))) => {
+							*this.state = EncryptState::PostHeader;
+							this.block_buffer.put(bytes);
+						}
+					}
 
 					return Poll::Ready(Some(Ok(Bytes::from_owner(buf))));
 				},
