@@ -3,10 +3,10 @@ use bytes::{Bytes, BytesMut, BufMut};
 use thiserror::Error;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 use hmac::Mac;
-use constant_time_eq::constant_time_eq_64;
+use constant_time_eq::{constant_time_eq_32, constant_time_eq_64};
 use core::pin::Pin;
 use core::task::{Context, Poll, ready};
-use crate::util::{HmacSha3_512, kdf, compute_verification_hash};
+use crate::util::{HmacSha3_256, kdf, compute_verification_hash};
 use crate::{BYTES_PER_POLL, Aes256Ctr};
 
 pin_project_lite::pin_project! {
@@ -109,6 +109,8 @@ pub struct DecryptAwaitingPassword<R> {
 	compression_algo: u8
 }
 
+const HMAC_LEN: usize = 32;
+
 impl<R> DecryptAwaitingPassword<R> {
 	/// This method is *very* blocking.
 	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
@@ -120,17 +122,17 @@ impl<R> DecryptAwaitingPassword<R> {
 		let key = kdf(password, &self.salt);
 
 		if constant_time_eq_64(compute_verification_hash(&key).as_ref(), &self.verification_hash) {
-			let mut integrity_code = HmacSha3_512::new_from_slice(key.as_ref().get_ref()).unwrap();
+			let mut integrity_code = HmacSha3_256::new_from_slice(key.as_ref().get_ref()).unwrap();
 			integrity_code.update(&[self.version_byte, self.compression_algo]);
 			integrity_code.update(&self.iv);
 
 			let buf_len = self.buffer.len();
-			let eof_buf = if buf_len >= 64 {
-				self.buffer.split_off(buf_len - 64)
+			let eof_buf = if buf_len >= HMAC_LEN {
+				self.buffer.split_off(buf_len - HMAC_LEN)
 			} else {
 				self.buffer.split()
 			};
-			debug_assert!(eof_buf.len() <= 64);
+			debug_assert!(eof_buf.len() <= HMAC_LEN);
 
 			let state = DecryptState::PostHeader(Box::new(DecryptionState {
 				aes: Aes256Ctr::new(key.as_ref().get_ref().into(), self.iv.as_ref().into()),
@@ -152,7 +154,7 @@ impl<R> DecryptAwaitingPassword<R> {
 
 struct DecryptionState {
 	aes: Aes256Ctr,
-	integrity_code: Option<HmacSha3_512>,
+	integrity_code: Option<HmacSha3_256>,
 	eof: bool,
 	eof_buf: BytesMut
 }
@@ -196,11 +198,11 @@ where
 		match this.state {
 			DecryptState::PostHeader(state) => {
 				if state.eof && this.buffer.len() <= BYTES_PER_POLL {
-					if state.eof_buf.len() < 64 {
+					if state.eof_buf.len() < HMAC_LEN {
 						*this.state = DecryptState::Done;
 						return Poll::Ready(Some(Err(DecryptStreamError::TooShort)));
 					}
-					debug_assert_eq!(state.eof_buf.len(), 64);
+					debug_assert_eq!(state.eof_buf.len(), HMAC_LEN);
 
 					let mut hmac = state.integrity_code.take().expect("integrity_code only taken here");
 					let mut data = this.buffer.split();
@@ -208,8 +210,8 @@ where
 					hmac.update(&data);
 					state.aes.apply_keystream(&mut data);
 
-					let stored_integrity_code: &[u8; 64] = state.eof_buf.as_ref().try_into().unwrap();
-					if !constant_time_eq_64(stored_integrity_code, hmac.finalize().into_bytes().as_ref()) {
+					let stored_integrity_code: &[u8; HMAC_LEN] = state.eof_buf.as_ref().try_into().unwrap();
+					if !constant_time_eq_32(stored_integrity_code, hmac.finalize().into_bytes().as_ref()) {
 						*this.state = DecryptState::Done;
 						return Poll::Ready(Some(Err(DecryptStreamError::IntegrityFailed)));
 					}
@@ -229,9 +231,9 @@ where
 						Some(Ok(bytes)) => {
 							state.eof_buf.put(bytes);
 							let eof_len = state.eof_buf.len();
-							if eof_len > 64 {
-								this.buffer.put(state.eof_buf.split_to(eof_len - 64));
-								debug_assert_eq!(state.eof_buf.len(), 64);
+							if eof_len > HMAC_LEN {
+								this.buffer.put(state.eof_buf.split_to(eof_len - HMAC_LEN));
+								debug_assert_eq!(state.eof_buf.len(), HMAC_LEN);
 							}
 							cx.waker().wake_by_ref();
 							Poll::Pending
@@ -241,7 +243,7 @@ where
 							Poll::Ready(Some(Err(DecryptStreamError::Stream(e))))
 						},
 						None => {
-							debug_assert!(state.eof_buf.len() <= 64);
+							debug_assert!(state.eof_buf.len() <= HMAC_LEN);
 							state.eof = true;
 							cx.waker().wake_by_ref();
 							Poll::Pending

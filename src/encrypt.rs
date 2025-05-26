@@ -5,7 +5,7 @@ use ctr::cipher::{KeyIvInit, StreamCipher};
 use hmac::Mac;
 use core::pin::Pin;
 use core::task::{Context, Poll, ready};
-use crate::util::{HmacSha3_512, new_arr, kdf, compute_verification_hash};
+use crate::util::{HmacSha3_256, new_arr, kdf, compute_verification_hash};
 use crate::{BYTES_PER_POLL, Aes256Ctr};
 
 enum EncryptState {
@@ -22,7 +22,7 @@ pin_project_lite::pin_project! {
 		aes: Aes256Ctr,
 		password_salt: Box<[u8; 32]>,
 		password_verification_hash: Box<[u8; 64]>,
-		integrity_code: Option<HmacSha3_512>,
+		integrity_code: Option<HmacSha3_256>,
 		state: EncryptState,
 		block_buffer: BytesMut,
 		iv: [u8; 16]
@@ -52,7 +52,7 @@ impl<R> Encrypt<R> {
 			aes,
 			password_salt,
 			password_verification_hash,
-			integrity_code: Some(HmacSha3_512::new_from_slice(aes_key.as_ref().get_ref()).unwrap()),
+			integrity_code: Some(HmacSha3_256::new_from_slice(aes_key.as_ref().get_ref()).unwrap()),
 			state: EncryptState::PreHeader,
 			block_buffer: BytesMut::new(),
 			iv

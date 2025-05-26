@@ -29,8 +29,8 @@ SSEC guarantees confidentiality and integrity against such an adversary.
 - Bytes 6-37: password salt (randomly generated, used for password verification hash)
 - Bytes 38-101: password verification hash (see below)
 - Bytes 102-117: initialization vector (randomly generated)
-- Bytes 118-(EOF-64): encrypted file (see below)
-- Bytes (EOF-63)-EOF: integrity code (see below)
+- Bytes 118-(EOF-32): encrypted file (see below)
+- Bytes (EOF-31)-EOF: integrity code (see below)
 
 # Note on Argon2dKDF
 The parameters used for Argon2dKDF are as follows:
@@ -53,7 +53,7 @@ When attempting to decrypt, the computed value (from user inputted password) mus
 After the user inputs the password and the program checks the password verification hash, the program computes the following:
 
 ```
-HMAC-SHA3-512(
+HMAC-SHA3-256(
 	Argon2dKDF(input_password, stored_salt),
 	concat(
 		ssec_version_byte,

@@ -1,10 +1,10 @@
 use zeroize::Zeroizing;
-use sha3::{Sha3_512, Digest};
+use sha3::{Sha3_256, Sha3_512, Digest};
 use hmac::Hmac;
 use core::pin::Pin;
 use core::ops::DerefMut;
 
-pub(crate) type HmacSha3_512 = Hmac<Sha3_512>;
+pub(crate) type HmacSha3_256 = Hmac<Sha3_256>;
 
 /// allocates a new boxed array with unspecified contents (like `malloc` in C)
 #[inline]
