@@ -25,6 +25,7 @@ impl<R> Decrypt<R> {
 		}
 	}
 }
+
 #[derive(Error, Debug)]
 pub enum SsecHeaderError<E> {
 	#[error("wrapped stream did not produce a SSEC file")]
