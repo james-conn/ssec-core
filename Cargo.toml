@@ -1,6 +1,6 @@
 [package]
 name = "ssec-core"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 description = "streaming implementation of the SSEC file format"
 categories = [ "asynchronous", "encoding", "security" ]
@@ -24,11 +24,11 @@ features = [ "alloc" ]
 futures-core = "0.3"
 bytes = "1"
 rand_core = "0.9"
-ctr = "0.9"
-hmac = "0.12"
-sha3 = "0.10"
+ctr = "0.10.0-rc.0"
+hmac = "0.13.0-rc.0"
+sha3 = "0.11.0-rc.0"
 pin-project-lite = "0.2"
-aes = "0.8"
+aes = "0.9.0-rc.0"
 thiserror = "2"
 zeroize = "1"
 constant_time_eq = "0.4"

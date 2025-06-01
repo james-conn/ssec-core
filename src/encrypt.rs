@@ -2,7 +2,7 @@ use futures_core::Stream;
 use bytes::{Bytes, BytesMut, BufMut};
 use rand_core::TryCryptoRng;
 use ctr::cipher::{KeyIvInit, StreamCipher};
-use hmac::Mac;
+use hmac::{Mac, KeyInit};
 use core::pin::Pin;
 use core::task::{Context, Poll, ready};
 use crate::util::{HmacSha3_256, new_arr, kdf, compute_verification_hash};
@@ -45,7 +45,7 @@ impl<R> Encrypt<R> {
 		let mut iv = [0; 16];
 		rng.try_fill_bytes(&mut iv)?;
 
-		let aes = Aes256Ctr::new(aes_key.as_ref().get_ref().into(), iv.as_ref().into());
+		let aes = Aes256Ctr::new(aes_key.as_ref().get_ref().into(), (&iv).into());
 
 		Ok(Self {
 			read,

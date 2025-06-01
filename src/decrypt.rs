@@ -2,7 +2,7 @@ use futures_core::Stream;
 use bytes::{Bytes, BytesMut, BufMut};
 use thiserror::Error;
 use ctr::cipher::{KeyIvInit, StreamCipher};
-use hmac::Mac;
+use hmac::{Mac, KeyInit};
 use constant_time_eq::{constant_time_eq_32, constant_time_eq_64};
 use core::pin::Pin;
 use core::task::{Context, Poll, ready};
@@ -136,7 +136,7 @@ impl<R> DecryptAwaitingPassword<R> {
 			debug_assert!(eof_buf.len() <= HMAC_LEN);
 
 			let state = DecryptState::PostHeader(Box::new(DecryptionState {
-				aes: Aes256Ctr::new(key.as_ref().get_ref().into(), self.iv.as_ref().into()),
+				aes: Aes256Ctr::new(key.as_ref().get_ref().into(), (&self.iv).into()),
 				integrity_code: Some(integrity_code),
 				eof: false,
 				eof_buf
