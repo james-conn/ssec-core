@@ -42,8 +42,9 @@ version = "0.9"
 default-features = false
 features = [ "std_rng" ]
 
-[dev-dependencies]
-futures-util = "0.3"
+[dev-dependencies.futures-util]
+version = "0.3"
+default-features = false
 
 # turns out running a key derivation function with no optimization is slow, who would have guessed?
 [profile.test]
