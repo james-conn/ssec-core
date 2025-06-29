@@ -1,10 +1,11 @@
 use futures_core::Stream;
 use bytes::{Bytes, BytesMut, BufMut};
-use thiserror::Error;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 use hmac::{Mac, KeyInit};
 use constant_time_eq::{constant_time_eq_32, constant_time_eq_64};
 use core::pin::Pin;
+use core::fmt::Display;
+use core::error::Error;
 use core::task::{Context, Poll, ready};
 use crate::util::{HmacSha3_256, kdf, compute_verification_hash};
 use crate::{BYTES_PER_POLL, Aes256Ctr};
@@ -26,16 +27,38 @@ impl<R> Decrypt<R> {
 	}
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum SsecHeaderError<E> {
-	#[error("wrapped stream did not produce a SSEC file")]
 	NotSsec,
-	#[error("SSEC file version {0:?} is unsupported")]
 	UnsupportedVersion(u8),
-	#[error("SSEC compression algorithm {0:?} is valid but currently unsupported")]
 	UnsupportedCompression(u8),
-	#[error(transparent)]
-	Stream(#[from] E)
+	Stream(E)
+}
+
+impl<E: Display> Display for SsecHeaderError<E> {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::NotSsec => write!(f, "wrapped stream did not produce a SSEC file"),
+			Self::UnsupportedVersion(v) => write!(f, "SSEC file version {v:?} is unsupported"),
+			Self::UnsupportedCompression(c) => write!(f, "SSEC compression algorithm {c:?} is valid but currently unsupported"),
+			Self::Stream(e) => e.fmt(f)
+		}
+	}
+}
+
+impl<E: Error> Error for SsecHeaderError<E>
+where
+	Self: Display
+{
+	#[inline]
+	fn source(&self) -> Option<&(dyn Error + 'static)> {
+		match self {
+			Self::NotSsec => None,
+			Self::UnsupportedVersion(_) => None,
+			Self::UnsupportedCompression(_) => None,
+			Self::Stream(e) => e.source()
+		}
+	}
 }
 
 const HEADER_LEN: usize = 118;
@@ -174,14 +197,35 @@ pin_project_lite::pin_project! {
 	}
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum DecryptStreamError<E> {
-	#[error("wrapped stream was too short to have been a valid SSEC file (no integrity code)")]
 	TooShort,
-	#[error("the file has been tampered with, previously decrypted data is inauthentic and should be discarded")]
 	IntegrityFailed,
-	#[error(transparent)]
-	Stream(#[from] E)
+	Stream(E)
+}
+
+impl<E: Display> Display for DecryptStreamError<E> {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::TooShort => write!(f, "wrapped stream was too short to have been a valid SSEC file (no integrity code)"),
+			Self::IntegrityFailed => write!(f, "the file has been tampered with, previously decrypted data is inauthentic and should be discarded"),
+			Self::Stream(e) => e.fmt(f)
+		}
+	}
+}
+
+impl<E: Error> Error for DecryptStreamError<E>
+where
+	Self: Display
+{
+	#[inline]
+	fn source(&self) -> Option<&(dyn Error + 'static)> {
+		match self {
+			Self::TooShort => None,
+			Self::IntegrityFailed => None,
+			Self::Stream(e) => e.source()
+		}
+	}
 }
 
 impl<E, R> Stream for DecryptStream<R>
