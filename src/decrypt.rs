@@ -46,8 +46,9 @@ impl<E: Display> Display for SsecHeaderError<E> {
 	}
 }
 
-impl<E: Error> Error for SsecHeaderError<E>
+impl<E> Error for SsecHeaderError<E>
 where
+	E: Error + 'static,
 	Self: Display
 {
 	#[inline]
@@ -56,7 +57,7 @@ where
 			Self::NotSsec => None,
 			Self::UnsupportedVersion(_) => None,
 			Self::UnsupportedCompression(_) => None,
-			Self::Stream(e) => e.source()
+			Self::Stream(e) => Some(e)
 		}
 	}
 }
@@ -214,8 +215,9 @@ impl<E: Display> Display for DecryptStreamError<E> {
 	}
 }
 
-impl<E: Error> Error for DecryptStreamError<E>
+impl<E> Error for DecryptStreamError<E>
 where
+	E: Error + 'static,
 	Self: Display
 {
 	#[inline]
@@ -223,7 +225,7 @@ where
 		match self {
 			Self::TooShort => None,
 			Self::IntegrityFailed => None,
-			Self::Stream(e) => e.source()
+			Self::Stream(e) => Some(e)
 		}
 	}
 }
