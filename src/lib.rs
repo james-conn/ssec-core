@@ -10,5 +10,8 @@ pub use encrypt::Encrypt;
 pub mod decrypt;
 pub use decrypt::Decrypt;
 
+#[cfg(feature = "brotli")]
+mod brotli_stream;
+
 #[cfg(test)]
 mod tests;

@@ -8,11 +8,33 @@ use core::task::{Context, Poll, ready};
 use crate::util::{HmacSha3_256, new_arr, kdf, compute_verification_hash};
 use crate::{BYTES_PER_POLL, Aes256Ctr};
 
+#[cfg(feature = "brotli")]
+pub use crate::brotli_stream::BrotliParams;
+
+#[cfg(feature = "brotli")]
+use crate::brotli_stream::BrotliEncStream;
+
 enum EncryptState {
 	PreHeader,
 	PostHeader,
 	Finalizing,
 	Finished
+}
+
+enum CompressionType {
+	Uncompressed,
+	#[cfg(feature = "brotli")]
+	Brotli
+}
+
+impl CompressionType {
+	fn to_byte(&self) -> u8 {
+		match self {
+			Self::Uncompressed => 0x6e,
+			#[cfg(feature = "brotli")]
+			Self::Brotli => 0x62
+		}
+	}
 }
 
 pin_project_lite::pin_project! {
@@ -25,17 +47,32 @@ pin_project_lite::pin_project! {
 		integrity_code: Option<HmacSha3_256>,
 		state: EncryptState,
 		block_buffer: BytesMut,
-		iv: [u8; 16]
+		iv: [u8; 16],
+		compression_type: CompressionType
 	}
 }
 
 impl<R> Encrypt<R> {
 	/// This method is *very* blocking.
 	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
-	/// It's very important that you provide the correct length of the `read` stream otherwise you'll get a corrupted stream.
 	///
 	/// SECURITY: It is advisable to zero out the memory containing the password after this method returns.
 	pub fn new_uncompressed<RNG: TryCryptoRng>(read: R, password: &[u8], rng: &mut RNG) -> Result<Self, RNG::Error> {
+		Self::new(read, password, rng, CompressionType::Uncompressed)
+	}
+
+	/// This method is *very* blocking.
+	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
+	///
+	/// SECURITY: It is advisable to zero out the memory containing the password after this method returns.
+	#[cfg(feature = "brotli")]
+	pub fn new_compressed<RNG: TryCryptoRng>(read: R, password: &[u8], rng: &mut RNG, brotli_params: BrotliParams) -> Result<Encrypt<BrotliEncStream<R>>, RNG::Error> {
+		let compressed_reader = BrotliEncStream::new(read, brotli_params);
+		Encrypt::new(compressed_reader, password, rng, CompressionType::Brotli)
+	}
+
+	#[inline]
+	fn new<RNG: TryCryptoRng>(read: R, password: &[u8], rng: &mut RNG, compression_type: CompressionType) -> Result<Self, RNG::Error> {
 		let mut password_salt = new_arr::<32>();
 		rng.try_fill_bytes(password_salt.as_mut())?;
 
@@ -55,7 +92,8 @@ impl<R> Encrypt<R> {
 			integrity_code: Some(HmacSha3_256::new_from_slice(aes_key.as_ref().get_ref()).unwrap()),
 			state: EncryptState::PreHeader,
 			block_buffer: BytesMut::new(),
-			iv
+			iv,
+			compression_type
 		})
 	}
 }
@@ -83,14 +121,14 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 
 					buf.extend_from_slice(b"SSEC");
 					buf.push(0x01);
-					buf.push(0x6e);
+					buf.push(this.compression_type.to_byte());
 					buf.extend_from_slice(this.password_salt.as_ref());
 					buf.extend_from_slice(this.password_verification_hash.as_ref());
 					buf.extend_from_slice(this.iv.as_ref());
 
 					// as per spec: first we add the version byte, compression algo, then iv before the data
 					let integrity_code = this.integrity_code.as_mut().unwrap();
-					integrity_code.update(&[0x01, 0x6e]);
+					integrity_code.update(&[0x01, this.compression_type.to_byte()]);
 					integrity_code.update(this.iv.as_ref());
 
 					match this.read.poll_next(cx) {

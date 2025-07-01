@@ -20,6 +20,10 @@ version = "0.6.0-rc.0"
 default-features = false
 features = [ "alloc" ]
 
+[dependencies.brotli]
+version = "8"
+optional = true
+
 [dependencies]
 futures-core = "0.3"
 bytes = "1"
@@ -44,6 +48,10 @@ features = [ "std_rng" ]
 [dev-dependencies.futures-util]
 version = "0.3"
 default-features = false
+
+[features]
+default = []
+brotli = [ "dep:brotli" ]
 
 # turns out running a key derivation function with no optimization is slow, who would have guessed?
 [profile.test]
