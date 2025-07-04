@@ -70,7 +70,6 @@ impl<E, S: Stream<Item = Result<Bytes, E>>> Stream for BrotliEncStream<S> {
 
 					let mut in_offset = 0;
 					let mut out_offset = 0;
-					//let mut out_buf = vec![0; BROTLI_BUF_LEN];
 					let mut out_buf = vec![0; BROTLI_BUF_LEN];
 
 					let brotli_ok = this.brotli.compress_stream(
