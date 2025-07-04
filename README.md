@@ -24,4 +24,4 @@ This specific implementation uses the `zeroize` crate to erase sensitive materia
 - [ ] fuzzing harness
 
 ## Acknowledgements
-This entire project was massively inspired by (https://fasterthanli.me/articles/the-case-for-sans-io).
+This entire project was massively inspired by <https://fasterthanli.me/articles/the-case-for-sans-io>.
