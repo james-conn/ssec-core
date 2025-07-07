@@ -50,7 +50,7 @@ version = "0.3"
 default-features = false
 
 [features]
-default = []
+default = [ "brotli" ]
 brotli = [ "dep:brotli" ]
 
 # turns out running a key derivation function with no optimization is slow, who would have guessed?

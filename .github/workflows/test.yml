@@ -7,7 +7,7 @@ jobs:
   test:
     strategy:
       matrix:
-        flags: [ "", "--features brotli" ]
+        flags: [ "--no-default-features", "--features brotli" ]
     runs-on: ubuntu-latest
 
     steps:
