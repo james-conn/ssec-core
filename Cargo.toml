@@ -16,7 +16,7 @@ include = [
 ]
 
 [dependencies.argon2]
-version = "0.6.0-rc.0"
+version = "=0.6.0-rc.1"
 default-features = false
 features = [ "alloc", "zeroize" ]
 
@@ -24,11 +24,11 @@ features = [ "alloc", "zeroize" ]
 futures-core = "0.3"
 bytes = "1"
 rand_core = "0.9"
-ctr = { version = "0.10.0-rc.0", features = [ "zeroize" ] }
-hmac = { version = "0.13.0-rc.0", features = [ "zeroize" ] }
-sha3 = { version = "0.11.0-rc.0", features = [ "zeroize" ] }
+ctr = { version = "=0.10.0-rc.1", features = [ "zeroize" ] }
+hmac = { version = "=0.13.0-rc.1", features = [ "zeroize" ] }
+sha3 = { version = "=0.11.0-rc.3", features = [ "zeroize" ] }
 pin-project-lite = "0.2"
-aes = { version = "0.9.0-rc.0", features = [ "zeroize" ] }
+aes = { version = "=0.9.0-rc.1", features = [ "zeroize" ] }
 zeroize = "1"
 constant_time_eq = "0.4"
 
