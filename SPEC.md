@@ -75,7 +75,16 @@ To encrypt, the input file is passed through the function specified by the compr
 The output of the compression is then encrypted using AES-256-CTR as a stream cipher with a 64-bit little endian counter, with the key being the output of `Argon2dKDF(password, salt)`.
 The decryption process is the inverse of the encryption process.
 
+# Plausible Deniability (Chaff Mode) {#chaff-mode}
+SSEC is designed in such a way that it's possible to generate "chaff" data.
+This is possible because all data after the byte signifying the compression algorithm is indistinguishable from a normal SSEC file with an unknown password.
+To generate chaff data, simply write a fake header and then write at least 144 additional bytes of random data in order to reach the required minimum length of a valid SSEC file.
+Chaff output of less than 150 bytes is considered incorrect because this is the minimum length of a valid (empty) SSEC file.
+Of course, a 150 byte chaff file doesn't provide much plausible deniability because a valid 150 byte SSEC couldn't contain any useful data.
+Users are advised to generate appropriately long chaff files in order to have effective plausible deniability.
+
 # Security Checklist
 - Did you [check the password verification hash](#password-verification-hash)?
 - Did you [check the integrity code](#integrity-code)?  Also see the provided [implementation guidance](#integrity-code-guidance).
 - Did you use a cryptographically secure RNG for random generation?
+- In [chaff mode](#chaff-mode), did you ensure the output is at least as long as the smallest valid SSEC file?

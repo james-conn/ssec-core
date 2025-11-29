@@ -3,6 +3,8 @@ use bytes::{Bytes, BytesMut};
 use rand_core::SeedableRng;
 use crate::encrypt::Encrypt;
 use crate::decrypt::{Decrypt, DecryptStreamError};
+use crate::chaff::ChaffStream;
+use crate::HEADER_LENGTH;
 
 const RNG_SEED: u64 = 12345678;
 
@@ -195,3 +197,34 @@ test_password!(wrong_password_long, TEST_BUF_LONG);
 test_password!(wrong_password_perfectly_aligned, TEST_BUF_PERFECTLY_ALIGNED);
 test_password!(wrong_password_imperfectly_aligned, TEST_BUF_IMPERFECTLY_ALIGNED);
 test_password!(wrong_password_perfect_pad, TEST_BUF_PERFECT_PAD);
+
+macro_rules! test_chaff {
+	($n:ident, $l:literal) => {
+		#[tokio::test]
+		async fn $n() {
+			let rng = rand::rngs::StdRng::seed_from_u64(RNG_SEED);
+
+			let chaff_stream = ChaffStream::new(rng, $l, 1000).unwrap();
+			let chaff_data = chaff_stream.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
+			assert_eq!(chaff_data.len(), $l + HEADER_LENGTH);
+
+			let enc_chunks = chaff_data.chunks(1024)
+				.map(Bytes::copy_from_slice).collect::<Vec<Bytes>>();
+			let s = futures_util::stream::iter(enc_chunks)
+				.map(Result::<Bytes, std::io::Error>::Ok);
+
+			let decryptor = Decrypt::new(s).await.unwrap();
+			let decryptor = tokio::task::spawn_blocking(move || {
+				decryptor.try_password(WRONG_PASSWORD)
+			}).await.unwrap();
+
+			if decryptor.is_ok() {
+				panic!("password should be incorrect");
+			}
+		}
+	}
+}
+
+test_chaff!(chaff_basic, 123456);
+test_chaff!(chaff_small, 42);
+test_chaff!(chaff_empty, 0);

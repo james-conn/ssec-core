@@ -18,6 +18,7 @@ This specific implementation uses the `zeroize` crate to erase sensitive materia
 
 ## Feature Roadmap
 - [x] uncompressed mode
+- [x] plausibly deniable encryption (chaff mode)
 - [x] Brotli compression (in `brotli` branch)
 - [ ] Brotli decompression
 - [ ] more robust testing
