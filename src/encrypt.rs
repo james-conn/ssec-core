@@ -32,7 +32,6 @@ pin_project_lite::pin_project! {
 impl<R> Encrypt<R> {
 	/// This method is *very* blocking.
 	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
-	/// It's very important that you provide the correct length of the `read` stream otherwise you'll get a corrupted stream.
 	///
 	/// SECURITY: It is advisable to zero out the memory containing the password after this method returns.
 	pub fn new_uncompressed<RNG: TryCryptoRng>(read: R, password: &[u8], rng: &mut RNG) -> Result<Self, RNG::Error> {
