@@ -1,4 +1,4 @@
-use rand_core::TryRngCore;
+use rand_core::TryRng;
 use bytes::Bytes;
 use futures_core::Stream;
 use core::pin::Pin;
@@ -37,7 +37,7 @@ impl std::fmt::Display for NewChaffStreamError {
 
 impl std::error::Error for NewChaffStreamError {}
 
-impl<RNG:TryRngCore> ChaffStream<RNG> {
+impl<RNG:TryRng> ChaffStream<RNG> {
 	/// The `output_length` parameter controls the size of the hypothetical chaff input file.
 	/// In other words, the length of the stream is the length of the headers plus `output_length`.
 	pub fn new(rng: RNG, output_length: usize, chunk_size: usize) -> Result<Self, NewChaffStreamError> {
@@ -54,7 +54,7 @@ impl<RNG:TryRngCore> ChaffStream<RNG> {
 	}
 }
 
-impl<RNG: TryRngCore> Stream for ChaffStream<RNG> {
+impl<RNG: TryRng> Stream for ChaffStream<RNG> {
 	type Item = Result<Bytes, RNG::Error>;
 
 	fn poll_next(
