@@ -16,7 +16,7 @@ include = [
 ]
 
 [dependencies.argon2]
-version = "=0.6.0-rc.7"
+version = "=0.6.0-rc.8"
 default-features = false
 features = [ "alloc", "zeroize" ]
 
