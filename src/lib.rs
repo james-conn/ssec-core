@@ -16,3 +16,6 @@ pub use chaff::ChaffStream;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod qc_tests;

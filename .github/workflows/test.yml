@@ -6,6 +6,10 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      QUICKCHECK_MAX_TESTS: 10000000
+      QUICKCHECK_TESTS: 5000
+      QUICKCHECK_MIN_TESTS_PASSED: 5000
 
     steps:
     - uses: actions/checkout@v4

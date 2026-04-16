@@ -32,6 +32,10 @@ aes = { version = "=0.9.0-rc.4", features = [ "zeroize" ] }
 zeroize = "1"
 constant_time_eq = "0.4"
 
+[dev-dependencies]
+quickcheck = "1.1"
+quickcheck_macros = "1.2"
+
 [dev-dependencies.tokio]
 version = "1"
 features = [ "rt", "macros" ]
