@@ -66,21 +66,20 @@ async fn end_to_end(rng_seed: u64, input_length: usize, password: Vec<u8>) -> Te
 
 	let input = Arc::new(init_buffer(&mut rng, input_length));
 	let password_enc = password.clone();
-	let in_chunks = OwnedRandomChunksIter::<99999, _, _>::new(input.clone(), rand::rngs::StdRng::seed_from_u64(rng_seed));
+	let in_chunks = OwnedRandomChunksIter::<99999, _, _>::new(input.clone(), rng);
 	let encryptor = tokio::task::spawn_blocking(move || {
 		let s = futures_util::stream::iter(in_chunks)
-			.map(Bytes::from_owner)
 			.map(Result::<Bytes, std::io::Error>::Ok);
 
-		Encrypt::new_uncompressed(s, &password_enc, &mut rng).unwrap()
+		let mut password_rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+		Encrypt::new_uncompressed(s, &password_enc, &mut password_rng).unwrap()
 	}).await.unwrap();
 
 	let encrypted: Bytes = encryptor.map(|c| c.unwrap())
 		.collect::<BytesMut>().await.freeze();
 
-	let enc_chunks = encrypted.chunks(1024)
-		.map(Bytes::copy_from_slice).collect::<Vec<Bytes>>();
-	let s = futures_util::stream::iter(enc_chunks)
+	let dec_chunk_rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+	let s = futures_util::stream::iter(OwnedRandomChunksIter::<99999, _, _>::new(Arc::new(encrypted), dec_chunk_rng))
 		.map(Result::<Bytes, std::io::Error>::Ok);
 
 	let decryptor = Decrypt::new(s).await.unwrap();
