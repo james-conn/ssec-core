@@ -1,25 +1,33 @@
 use futures_util::StreamExt;
 use bytes::{Bytes, BytesMut};
-use rand_core::SeedableRng;
+use rand_core::{Rng, SeedableRng};
+use quickcheck::TestResult;
 use std::sync::Arc;
 use crate::encrypt::Encrypt;
 use crate::decrypt::Decrypt;
 
-struct OwnedChunksIter<const S: usize, V: AsRef<[u8]>> {
+struct OwnedRandomChunksIter<const S: usize, V, R> {
 	vec: Arc<V>,
-	pos: usize
+	pos: usize,
+	rng: R
 }
 
-impl<const S: usize, V: AsRef<[u8]>> From<Arc<V>> for OwnedChunksIter<S, V> {
-	fn from(vec: Arc<V>) -> Self {
+impl<const S: usize, V: AsRef<[u8]>, R: Rng> OwnedRandomChunksIter<S, V, R> {
+	fn new(vec: Arc<V>, rng: R) -> Self {
 		Self {
 			vec,
-			pos: 0
+			pos: 0,
+			rng
 		}
+	}
+
+	fn next_chunk_size(&mut self) -> usize {
+		let n = self.rng.next_u32() as usize;
+		n % S
 	}
 }
 
-impl<const S: usize, V: AsRef<[u8]>> std::iter::Iterator for OwnedChunksIter<S, V> {
+impl<const S: usize, V: AsRef<[u8]>, R: Rng> std::iter::Iterator for OwnedRandomChunksIter<S, V, R> {
 	// returning a slice here would require `Item` to have a generic lifetime
 	type Item = Bytes;
 
@@ -29,22 +37,36 @@ impl<const S: usize, V: AsRef<[u8]>> std::iter::Iterator for OwnedChunksIter<S, 
 			return None
 		}
 
-		let end_idx = (self.pos + S).min(len);
+		let chunk_size = self.next_chunk_size();
+		let end_idx = (self.pos + chunk_size).min(len);
 		let slice = &self.vec.as_ref().as_ref()[self.pos..end_idx];
-		self.pos += S;
+		self.pos += chunk_size;
 
 		Some(Bytes::copy_from_slice(slice))
 	}
 }
 
+// buffers bigger than 64MB are probably not a meaningful test and may cause OOMs
+const MAX_SIZE: usize = 64 * 1024 * 1024;
+
+fn init_buffer<R: Rng>(mut rng: R, length: usize) -> Vec<u8> {
+	let mut b = vec![0u8; length];
+	rng.fill_bytes(&mut b);
+	b
+}
+
 #[tokio::test]
 #[quickcheck_macros::quickcheck]
-async fn end_to_end(rng_seed: u64, input: Vec<u8>, password: Vec<u8>) -> bool {
+async fn end_to_end(rng_seed: u64, input_length: usize, password: Vec<u8>) -> TestResult {
+	if input_length > MAX_SIZE {
+		return TestResult::discard();
+	}
+
 	let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
 
-	let input = Arc::new(input);
+	let input = Arc::new(init_buffer(&mut rng, input_length));
 	let password_enc = password.clone();
-	let in_chunks: OwnedChunksIter<1024, Vec<u8>> = OwnedChunksIter::from(input.clone());
+	let in_chunks = OwnedRandomChunksIter::<99999, _, _>::new(input.clone(), rand::rngs::StdRng::seed_from_u64(rng_seed));
 	let encryptor = tokio::task::spawn_blocking(move || {
 		let s = futures_util::stream::iter(in_chunks)
 			.map(Bytes::from_owner)
@@ -69,5 +91,5 @@ async fn end_to_end(rng_seed: u64, input: Vec<u8>, password: Vec<u8>) -> bool {
 
 	let decrypted = decryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
 
-	input.as_ref().eq(&decrypted)
+	TestResult::from_bool(input.as_ref().eq(&decrypted))
 }
