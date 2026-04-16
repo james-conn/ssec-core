@@ -16,13 +16,5 @@ When decrypting a SSEC file, the authenticity of the contents can be verified af
 SSEC makes no guarantees about side-channel resistance.
 This specific implementation uses the `zeroize` crate to erase sensitive material from memory (see [the docs](https://docs.rs/zeroize/latest/zeroize/) for more information about what this actually entails).
 
-## Feature Roadmap
-- [x] uncompressed mode
-- [x] plausibly deniable encryption (chaff mode)
-- [x] Brotli compression (in `brotli` branch)
-- [ ] Brotli decompression
-- [ ] more robust testing
-- [ ] fuzzing harness
-
 ## Acknowledgments
 This entire project was massively inspired by <https://fasterthanli.me/articles/the-case-for-sans-io>.
