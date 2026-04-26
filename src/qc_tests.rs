@@ -2,9 +2,10 @@ use futures_util::StreamExt;
 use bytes::{Bytes, BytesMut};
 use rand_core::{Rng, SeedableRng};
 use quickcheck::TestResult;
+use core::num::NonZeroUsize;
 use std::sync::Arc;
-use crate::encrypt::Encrypt;
-use crate::decrypt::Decrypt;
+use crate::encrypt::{Encrypt, EncryptArgs};
+use crate::decrypt::{Decrypt, DecryptArgs};
 
 struct OwnedRandomChunksIter<const S: usize, V, R> {
 	vec: Arc<V>,
@@ -55,9 +56,16 @@ fn init_buffer<R: Rng>(mut rng: R, length: usize) -> Vec<u8> {
 	b
 }
 
+// TODO: fix double test, both these attribute macros add their own `#[test]`
 #[tokio::test]
 #[quickcheck_macros::quickcheck]
-async fn end_to_end(rng_seed: u64, input_length: usize, password: Vec<u8>) -> TestResult {
+async fn end_to_end(
+	rng_seed: u64,
+	input_length: usize,
+	password: Vec<u8>,
+	bytes_per_poll_enc: NonZeroUsize,
+	bytes_per_poll_dec: NonZeroUsize
+) -> TestResult {
 	if input_length > MAX_SIZE {
 		return TestResult::discard();
 	}
@@ -72,7 +80,9 @@ async fn end_to_end(rng_seed: u64, input_length: usize, password: Vec<u8>) -> Te
 			.map(Result::<Bytes, std::io::Error>::Ok);
 
 		let mut password_rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
-		Encrypt::new_uncompressed(s, &password_enc, &mut password_rng).unwrap()
+		let mut args = EncryptArgs::default();
+		args.set_bytes_per_poll(bytes_per_poll_enc);
+		Encrypt::new(args, &mut password_rng, &password_enc, s).unwrap()
 	}).await.unwrap();
 
 	let encrypted: Bytes = encryptor.map(|c| c.unwrap())
@@ -82,7 +92,9 @@ async fn end_to_end(rng_seed: u64, input_length: usize, password: Vec<u8>) -> Te
 	let s = futures_util::stream::iter(OwnedRandomChunksIter::<99999, _, _>::new(Arc::new(encrypted), dec_chunk_rng))
 		.map(Result::<Bytes, std::io::Error>::Ok);
 
-	let decryptor = Decrypt::new(s).await.unwrap();
+	let mut args = DecryptArgs::default();
+	args.set_bytes_per_poll(bytes_per_poll_dec);
+	let decryptor = Decrypt::new(args, s).await.unwrap();
 	let decryptor = tokio::task::spawn_blocking(move || {
 		let Ok(stream) = decryptor.try_password(&password) else { panic!("password should be correct") };
 		stream
