@@ -6,6 +6,7 @@ use core::num::NonZeroUsize;
 use std::sync::Arc;
 use crate::encrypt::{Encrypt, EncryptArgs};
 use crate::decrypt::{Decrypt, DecryptArgs};
+use crate::chaff::{ChaffStream, ChaffArgs};
 
 struct OwnedRandomChunksIter<const S: usize, V, R> {
 	vec: Arc<V>,
@@ -102,4 +103,48 @@ async fn end_to_end(
 	let decrypted = decryptor.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
 
 	TestResult::from_bool(input.as_ref().eq(&decrypted))
+}
+
+// TODO: fix double test, both these attribute macros add their own `#[test]`
+#[tokio::test]
+#[quickcheck_macros::quickcheck]
+async fn chaff(
+	rng_seed: u64,
+	input_length: usize,
+	chunk_size: usize,
+	password: Vec<u8>,
+	bytes_per_poll_dec: NonZeroUsize
+) -> TestResult {
+	if input_length > MAX_SIZE {
+		return TestResult::discard();
+	}
+
+	let mut args = ChaffArgs::with_length(input_length);
+	let chunk_res = args.set_chunk_size(chunk_size);
+	if chunk_res.is_err() {
+		return TestResult::discard();
+	}
+
+	let rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+
+	let chaff = ChaffStream::new(args, rng);
+	let chaff_output: Bytes = chaff.map(|c| {
+		let chunk = c.unwrap();
+		assert!(chunk.len() <= chunk_size);
+		chunk
+	}).collect::<BytesMut>().await.freeze();
+
+	let dec_chunk_rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+	let s = futures_util::stream::iter(OwnedRandomChunksIter::<99999, _, _>::new(Arc::new(chaff_output), dec_chunk_rng))
+		.map(Result::<Bytes, std::io::Error>::Ok);
+
+	let mut args = DecryptArgs::default();
+	args.set_bytes_per_poll(bytes_per_poll_dec);
+	let decryptor = Decrypt::new(args, s).await.unwrap();
+	let decryptor = tokio::task::spawn_blocking(move || {
+		decryptor.try_password(&password)
+	}).await.unwrap();
+
+	// decryption should always fail, obviously
+	TestResult::from_bool(decryptor.is_err())
 }

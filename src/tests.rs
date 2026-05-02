@@ -3,7 +3,7 @@ use bytes::{Bytes, BytesMut};
 use rand_core::SeedableRng;
 use crate::encrypt::{Encrypt, EncryptArgs};
 use crate::decrypt::{Decrypt, DecryptArgs, DecryptStreamError};
-use crate::chaff::ChaffStream;
+use crate::chaff::{ChaffStream, ChaffArgs};
 use crate::HEADER_LENGTH;
 
 const RNG_SEED: u64 = 12345678;
@@ -204,8 +204,15 @@ macro_rules! test_chaff {
 		async fn $n() {
 			let rng = rand::rngs::StdRng::seed_from_u64(RNG_SEED);
 
-			let chaff_stream = ChaffStream::new(rng, $l, 1000).unwrap();
-			let chaff_data = chaff_stream.map(|c| c.unwrap()).collect::<BytesMut>().await.freeze();
+			let mut args = ChaffArgs::with_length($l);
+			let chunk_size = 1000;
+			args.set_chunk_size(chunk_size).unwrap();
+			let chaff_stream = ChaffStream::new(args, rng);
+			let chaff_data = chaff_stream.map(|c| {
+				let chunk = c.unwrap();
+				assert!(chunk.len() <= chunk_size);
+				chunk
+			}).collect::<BytesMut>().await.freeze();
 			assert_eq!(chaff_data.len(), $l + HEADER_LENGTH);
 
 			let enc_chunks = chaff_data.chunks(1024)
