@@ -5,8 +5,31 @@ use ctr::cipher::{KeyIvInit, StreamCipher};
 use hmac::{Mac, KeyInit};
 use core::pin::Pin;
 use core::task::{Context, Poll, ready};
+use core::num::NonZeroUsize;
 use crate::util::{HmacSha3_256, new_arr, kdf, compute_verification_hash};
-use crate::{BYTES_PER_POLL, Aes256Ctr};
+use crate::{DEFAULT_BYTES_PER_POLL, Aes256Ctr};
+
+/// builder for arguments to [Encrypt::new] with default values, can be constructed with [EncryptArgs::default]
+#[derive(Debug, Clone, Copy)]
+pub struct EncryptArgs {
+	bytes_per_poll: NonZeroUsize
+}
+
+impl Default for EncryptArgs {
+	/// default settings are not part of semver contract
+	fn default() -> Self {
+		Self {
+			bytes_per_poll: DEFAULT_BYTES_PER_POLL
+		}
+	}
+}
+
+impl EncryptArgs {
+	/// sets the maximum number of bytes to encrypt before yielding to the executor
+	pub fn set_bytes_per_poll(&mut self, bytes_per_poll: NonZeroUsize) {
+		self.bytes_per_poll = bytes_per_poll;
+	}
+}
 
 enum EncryptState {
 	PreHeader,
@@ -25,7 +48,8 @@ pin_project_lite::pin_project! {
 		integrity_code: Option<HmacSha3_256>,
 		state: EncryptState,
 		block_buffer: BytesMut,
-		iv: [u8; 16]
+		iv: [u8; 16],
+		bytes_per_poll: NonZeroUsize
 	}
 }
 
@@ -34,7 +58,12 @@ impl<R> Encrypt<R> {
 	/// If you're using Tokio I advise that you wrap this call in a `spawn_blocking`.
 	///
 	/// SECURITY: It is advisable to zero out the memory containing the password after this method returns.
-	pub fn new_uncompressed<RNG: TryCryptoRng>(read: R, password: &[u8], rng: &mut RNG) -> Result<Self, RNG::Error> {
+	pub fn new<RNG: TryCryptoRng>(
+		additional_args: EncryptArgs,
+		rng: &mut RNG,
+		password: &[u8],
+		read: R
+	) -> Result<Self, RNG::Error> {
 		let mut password_salt = new_arr::<32>();
 		rng.try_fill_bytes(password_salt.as_mut())?;
 
@@ -54,7 +83,8 @@ impl<R> Encrypt<R> {
 			integrity_code: Some(HmacSha3_256::new_from_slice(aes_key.as_ref().get_ref()).unwrap()),
 			state: EncryptState::PreHeader,
 			block_buffer: BytesMut::new(),
-			iv
+			iv,
+			bytes_per_poll: additional_args.bytes_per_poll
 		})
 	}
 }
@@ -108,8 +138,8 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 					return Poll::Ready(Some(Ok(Bytes::from_owner(buf))));
 				},
 				EncryptState::PostHeader => {
-					if this.block_buffer.len() >= BYTES_PER_POLL {
-						let mut data = this.block_buffer.split_to(BYTES_PER_POLL);
+					if this.block_buffer.len() >= this.bytes_per_poll.get() {
+						let mut data = this.block_buffer.split_to(this.bytes_per_poll.get());
 						this.aes.apply_keystream(&mut data);
 						this.integrity_code.as_mut().unwrap().update(&data);
 
@@ -132,7 +162,7 @@ impl<E, R: Stream<Item = Result<Bytes, E>>> Stream for Encrypt<R> {
 					}
 				},
 				EncryptState::Finalizing => {
-					debug_assert!(this.block_buffer.len() < BYTES_PER_POLL);
+					debug_assert!(this.block_buffer.len() < this.bytes_per_poll.get());
 
 					let mut final_data = this.block_buffer.split();
 
