@@ -13,7 +13,7 @@ pub mod decrypt;
 pub use decrypt::{Decrypt, DecryptArgs};
 
 pub mod chaff;
-pub use chaff::ChaffStream;
+pub use chaff::{ChaffStream, ChaffArgs};
 
 #[cfg(test)]
 mod tests;
