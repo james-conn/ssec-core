@@ -6,7 +6,7 @@ use core::num::NonZeroUsize;
 use std::sync::Arc;
 use crate::encrypt::{Encrypt, EncryptArgs};
 use crate::decrypt::{Decrypt, DecryptArgs};
-use crate::chaff::{ChaffStream, ChaffArgs};
+use crate::chaff::{ChaffStream, ChaffStreamArgs};
 
 struct OwnedRandomChunksIter<const S: usize, V, R> {
 	vec: Arc<V>,
@@ -119,7 +119,7 @@ async fn chaff(
 		return TestResult::discard();
 	}
 
-	let mut args = ChaffArgs::with_length(input_length);
+	let mut args = ChaffStreamArgs::with_length(input_length);
 	let chunk_res = args.set_chunk_size(chunk_size);
 	if chunk_res.is_err() {
 		return TestResult::discard();

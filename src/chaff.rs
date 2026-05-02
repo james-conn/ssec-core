@@ -34,12 +34,12 @@ impl std::fmt::Display for ChunkSizeTooSmallError {
 impl std::error::Error for ChunkSizeTooSmallError {}
 
 #[derive(Debug, Clone, Copy)]
-pub struct ChaffArgs {
+pub struct ChaffStreamArgs {
 	output_length: usize,
 	chunk_size: usize
 }
 
-impl ChaffArgs {
+impl ChaffStreamArgs {
 	/// The `output_length` parameter controls the size of the hypothetical chaff input file.
 	/// In other words, the length of the stream is the length of the headers plus `output_length`.
 	pub fn with_length(output_length: usize) -> Self {
@@ -60,7 +60,7 @@ impl ChaffArgs {
 }
 
 impl<RNG:TryRng> ChaffStream<RNG> {
-	pub fn new(args: ChaffArgs, rng: RNG) -> Self {
+	pub fn new(args: ChaffStreamArgs, rng: RNG) -> Self {
 		debug_assert!(args.chunk_size >= MIN_CHUNK_SIZE);
 
 		Self {
