@@ -29,7 +29,6 @@ impl<const S: usize, V: AsRef<[u8]>, R: Rng> OwnedRandomChunksIter<S, V, R> {
 }
 
 impl<const S: usize, V: AsRef<[u8]>, R: Rng> std::iter::Iterator for OwnedRandomChunksIter<S, V, R> {
-	// returning a slice here would require `Item` to have a generic lifetime
 	type Item = Bytes;
 
 	fn next(&mut self) -> Option<Self::Item> {
