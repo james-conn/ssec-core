@@ -1,18 +1,19 @@
 mod util;
 
+const DEFAULT_BYTES_PER_POLL: core::num::NonZeroUsize = core::num::NonZeroUsize::new(128).unwrap();
+
 const HEADER_LENGTH: usize = 150;
-const BYTES_PER_POLL: usize = 128;
 
 type Aes256Ctr = ctr::Ctr64LE<aes::Aes256>;
 
 pub mod encrypt;
-pub use encrypt::Encrypt;
+pub use encrypt::{Encrypt, EncryptArgs};
 
 pub mod decrypt;
-pub use decrypt::Decrypt;
+pub use decrypt::{Decrypt, DecryptArgs};
 
 pub mod chaff;
-pub use chaff::ChaffStream;
+pub use chaff::{ChaffStream, ChaffStreamArgs};
 
 #[cfg(test)]
 mod tests;

@@ -23,34 +23,52 @@ pin_project_lite::pin_project! {
 const MIN_CHUNK_SIZE: usize = HEADER_LENGTH;
 
 #[derive(Debug)]
-pub enum NewChaffStreamError {
-	ChunkSizeTooSmall
-}
+pub struct ChunkSizeTooSmallError;
 
-impl std::fmt::Display for NewChaffStreamError {
+impl std::fmt::Display for ChunkSizeTooSmallError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Self::ChunkSizeTooSmall => write!(f, "chunk size too small, must be at least {MIN_CHUNK_SIZE} bytes")
-		}
+		write!(f, "chunk size too small, must be at least {MIN_CHUNK_SIZE} bytes")
 	}
 }
 
-impl std::error::Error for NewChaffStreamError {}
+impl std::error::Error for ChunkSizeTooSmallError {}
 
-impl<RNG:TryRng> ChaffStream<RNG> {
+#[derive(Debug, Clone, Copy)]
+pub struct ChaffStreamArgs {
+	output_length: usize,
+	chunk_size: usize
+}
+
+impl ChaffStreamArgs {
 	/// The `output_length` parameter controls the size of the hypothetical chaff input file.
 	/// In other words, the length of the stream is the length of the headers plus `output_length`.
-	pub fn new(rng: RNG, output_length: usize, chunk_size: usize) -> Result<Self, NewChaffStreamError> {
+	pub fn with_length(output_length: usize) -> Self {
+		Self {
+			output_length,
+			chunk_size: 2048
+		}
+	}
+
+	pub fn set_chunk_size(&mut self, chunk_size: usize) -> Result<(), ChunkSizeTooSmallError> {
 		if chunk_size < MIN_CHUNK_SIZE {
-			return Err(NewChaffStreamError::ChunkSizeTooSmall);
+			return Err(ChunkSizeTooSmallError);
 		}
 
-		Ok(Self {
+		self.chunk_size = chunk_size;
+		Ok(())
+	}
+}
+
+impl<RNG:TryRng> ChaffStream<RNG> {
+	pub fn new(args: ChaffStreamArgs, rng: RNG) -> Self {
+		debug_assert!(args.chunk_size >= MIN_CHUNK_SIZE);
+
+		Self {
 			rng,
 			state: ChaffState::PreHeader,
-			remaining_bytes: output_length,
-			chunk_size
-		})
+			remaining_bytes: args.output_length,
+			chunk_size: args.chunk_size
+		}
 	}
 }
 
@@ -66,7 +84,7 @@ impl<RNG: TryRng> Stream for ChaffStream<RNG> {
 		match this.state {
 			ChaffState::PreHeader => {
 				let output_len: usize = (HEADER_LENGTH + *this.remaining_bytes).min(*this.chunk_size);
-				assert!(output_len >= HEADER_LENGTH);
+				debug_assert!(output_len >= HEADER_LENGTH);
 
 				let mut output = Vec::with_capacity(output_len);
 

@@ -7,22 +7,47 @@ use core::pin::Pin;
 use core::fmt::Display;
 use core::error::Error;
 use core::task::{Context, Poll, ready};
+use core::num::NonZeroUsize;
 use crate::util::{HmacSha3_256, kdf, compute_verification_hash};
-use crate::{BYTES_PER_POLL, Aes256Ctr};
+use crate::{DEFAULT_BYTES_PER_POLL, Aes256Ctr};
+
+/// builder for arguments to [Decrypt::new] with default values, can be constructed with [DecryptArgs::default]
+#[derive(Debug, Clone, Copy)]
+pub struct DecryptArgs {
+	bytes_per_poll: NonZeroUsize
+}
+
+impl Default for DecryptArgs {
+	/// default settings are not part of semver contract
+	fn default() -> Self {
+		Self {
+			bytes_per_poll: DEFAULT_BYTES_PER_POLL
+		}
+	}
+}
+
+impl DecryptArgs {
+	/// sets the maximum number of bytes to decrypt before yielding to the executor
+	pub fn set_bytes_per_poll(&mut self, bytes_per_poll: NonZeroUsize) {
+		self.bytes_per_poll = bytes_per_poll;
+	}
+}
 
 pin_project_lite::pin_project! {
 	pub struct Decrypt<R> {
 		#[pin]
 		read: Option<R>,
-		buffer: Option<BytesMut>
+		buffer: Option<BytesMut>,
+		bytes_per_poll: NonZeroUsize
 	}
 }
 
 impl<R> Decrypt<R> {
-	pub fn new(read: R) -> Self {
+	pub fn new(additional_args: DecryptArgs, read: R) -> Self {
 		Self {
 			read: Some(read),
-			buffer: Some(BytesMut::new())
+			buffer: Some(BytesMut::new()),
+			bytes_per_poll: additional_args.bytes_per_poll
 		}
 	}
 }
@@ -105,7 +130,8 @@ impl<E, R: Stream<Item = Result<Bytes, E>> + Unpin> Future for Decrypt<R> {
 				verification_hash,
 				iv,
 				version_byte: header[4],
-				compression_algo: header[5]
+				compression_algo: header[5],
+				bytes_per_poll: *this.bytes_per_poll
 			})))
 		} else {
 			let read = this.read.as_pin_mut().unwrap();
@@ -131,7 +157,8 @@ pub struct DecryptAwaitingPassword<R> {
 	verification_hash: [u8; 64],
 	iv: [u8; 16],
 	version_byte: u8,
-	compression_algo: u8
+	compression_algo: u8,
+	bytes_per_poll: NonZeroUsize
 }
 
 const HMAC_LEN: usize = 32;
@@ -169,7 +196,8 @@ impl<R> DecryptAwaitingPassword<R> {
 			Ok(DecryptStream {
 				read: self.read,
 				state,
-				buffer: self.buffer
+				buffer: self.buffer,
+				bytes_per_poll: self.bytes_per_poll
 			})
 		} else {
 			Err(self)
@@ -195,6 +223,7 @@ pin_project_lite::pin_project! {
 		read: R,
 		state: DecryptState,
 		buffer: BytesMut,
+		bytes_per_poll: NonZeroUsize
 	}
 }
 
@@ -244,7 +273,7 @@ where
 
 		match this.state {
 			DecryptState::PostHeader(state) => {
-				if state.eof && this.buffer.len() <= BYTES_PER_POLL {
+				if state.eof && this.buffer.len() <= this.bytes_per_poll.get() {
 					if state.eof_buf.len() < HMAC_LEN {
 						*this.state = DecryptState::Done;
 						return Poll::Ready(Some(Err(DecryptStreamError::TooShort)));
@@ -266,8 +295,8 @@ where
 					*this.state = DecryptState::Done;
 
 					Poll::Ready(Some(Ok(data.freeze())))
-				} else if this.buffer.len() >= BYTES_PER_POLL {
-					let mut data = this.buffer.split_to(BYTES_PER_POLL);
+				} else if this.buffer.len() >= this.bytes_per_poll.get() {
+					let mut data = this.buffer.split_to(this.bytes_per_poll.get());
 
 					state.integrity_code.as_mut().unwrap().update(&data);
 					state.aes.apply_keystream(&mut data);
