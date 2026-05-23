@@ -12,5 +12,5 @@ jobs:
       QUICKCHECK_MIN_TESTS_PASSED: 5000
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: cargo test --verbose
