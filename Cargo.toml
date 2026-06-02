@@ -7,6 +7,7 @@ categories = [ "asynchronous", "encoding", "security" ]
 authors = [ "James Connolly <me@j-conn.com>" ]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/james-conn/ssec-core"
+rust-version = "1.95"
 
 include = [
 	"/Cargo.toml",
@@ -30,7 +31,7 @@ sha3 = { version = "0.12", features = [ "zeroize" ] }
 pin-project-lite = "0.2"
 aes = { version = "0.9", features = [ "zeroize" ] }
 zeroize = "1"
-constant_time_eq = "0.4"
+constant_time_eq = "0.5"
 
 [dev-dependencies]
 quickcheck = "1.1"
